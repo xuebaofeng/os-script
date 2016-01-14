@@ -1,1 +1,1 @@
-/Users/bxue/.crontab
+0,15,30,45 9-17 * 1-5 * ~/git-update.sh >>git-update.log
