@@ -6,6 +6,6 @@
 build
 gin-bin
 tmp
-.sh
+*.sh
 target
 bin

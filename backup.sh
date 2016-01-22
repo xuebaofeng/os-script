@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
+git pull
 
-cp ~/git-update.sh git-update.sh
 cp ~/.zshrc .zshrc
 cp ~/.zshrc .zshrc
 cp ~/.gitconfig .gitconfig
