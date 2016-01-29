@@ -90,7 +90,7 @@ export GRADLE_HOME=/Applications/gradle-2.9
 export M2_HOME=/Applications/apache-maven-3.3.9
 export SCALA_HOME=/Users/bxue/Downloads/scala-2.11.7
 export INTELLIJ_HOME=/Applications/IntelliJ\ IDEA\ 15.app/Contents/MacOS
-
+export ANDROID_HOME=/usr/local/opt/android-sdk
 
 export PATH=$INTELLIJ_HOME:$SCALA_HOME/bin:$GOPATH/bin:$GRADLE_HOME/bin:$JAVA_HOME/bin:$M2_HOME/bin:$PATH
 
