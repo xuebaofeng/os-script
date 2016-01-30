@@ -10,7 +10,6 @@ target
 bin
 
 *.iml
-*.sh
 *.eml
 *.userlibraries
 
