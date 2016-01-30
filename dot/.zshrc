@@ -84,11 +84,11 @@ export PATH=$HOME/bin:/usr/local/bin:$PATH
 # alias ohmyzsh="mate ~/.oh-my-zsh"
 
 
-export GOPATH=/Users/bxue/gowork
+export GOPATH=~/gowork
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_60.jdk/Contents/Home
 export GRADLE_HOME=/Applications/gradle-2.9
 export M2_HOME=/Applications/apache-maven-3.3.9
-export SCALA_HOME=/Users/bxue/Downloads/scala-2.11.7
+export SCALA_HOME=~/Downloads/scala-2.11.7
 export INTELLIJ_HOME=/Applications/IntelliJ\ IDEA\ 15.app/Contents/MacOS
 export ANDROID_HOME=/usr/local/opt/android-sdk
 

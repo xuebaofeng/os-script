@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-0,15,30,45,22 9-17 * * * ~/github/os-script/git-update.sh >> ~/git-update.log
-0 16 * * * ~/github/os-script/backup.sh
+0,15,30,45,22 9-17 * * * ~/github/os-script/sh/git-update.sh >> ~/git-update.log
+0 16 * * * ~/github/os-script/sh/backup.sh
 0 16 * * * rm "/Users/$(whoami)/Library/Application Support/Beyond Compare/registry.dat"
