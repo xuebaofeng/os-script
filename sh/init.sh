@@ -5,3 +5,4 @@ chsh -s /bin/zsh
 git clone https://github.com/clvv/fasd
 cd fasd 
 sudo make install
+pip install classifier
