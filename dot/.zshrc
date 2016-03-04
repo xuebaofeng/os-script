@@ -49,7 +49,7 @@ HIST_STAMPS="yyyy-mm-dd"
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git)
+plugins=(git,mvn)
 
 # User configuration
 
@@ -63,7 +63,7 @@ export PATH=$HOME/bin:/usr/local/bin:$PATH
 
 # Preferred editor for local and remote sessions
 # if [[ -n $SSH_CONNECTION ]]; then
-#   export EDITOR='vim'
+   export EDITOR='vim'
 # else
 #   export EDITOR='mvim'
 # fi
@@ -78,11 +78,7 @@ export PATH=$HOME/bin:/usr/local/bin:$PATH
 # plugins, and themes. Aliases can be placed here, though oh-my-zsh
 # users are encouraged to define aliases within the ZSH_CUSTOM folder.
 # For a full list of active aliases, run `alias`.
-#
-# Example aliases
-# alias zshconfig="mate ~/.zshrc"
-# alias ohmyzsh="mate ~/.oh-my-zsh"
-
+alias g='git'
 
 export GOPATH=~/gowork
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_60.jdk/Contents/Home
@@ -97,8 +93,3 @@ export PATH=$SCALA_HOME\bin:$INTELLIJ_HOME:$SCALA_HOME/bin:$GOPATH/bin:$GRADLE_H
 eval "$(fasd --init auto)"
 
 source $ZSH/oh-my-zsh.sh
-
-
-#THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
-export SDKMAN_DIR="/Users/bxue/.sdkman"
-[[ -s "/Users/bxue/.sdkman/bin/sdkman-init.sh" ]] && source "/Users/bxue/.sdkman/bin/sdkman-init.sh"
