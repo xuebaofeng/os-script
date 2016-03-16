@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 
+cd ~/github/os-script
 git pull
-
-cd ..
 
 cp ~/.zshrc ./dot/
 cp ~/.gitconfig ./dot/
