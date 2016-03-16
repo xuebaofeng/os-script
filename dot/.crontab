@@ -1,5 +1,5 @@
-0 17 * * * ~/github/os-script/git-update.sh >> ~/git-update.log
-0 16 * * * ~/github/os-script/backup.sh
+0 17 * * * ~/github/os-script/sh/git-update.sh >> ~/git-update.log
+0 16 * * * ~/github/os-script/sh/backup.sh
 0 16 * * * rm "/Users/$(whoami)/Library/Application Support/Beyond Compare/registry.dat"
 0 16 * * * python /Users/bxue/github/os-script/py/classify.py
 
