@@ -75,6 +75,7 @@ export EDITOR='vim'
 # users are encouraged to define aliases within the ZSH_CUSTOM folder.
 # For a full list of active aliases, run `alias`.
 alias g='git'
+alias mvn=mvn -T 2.5Cl -Dmaven.junit.fork=true -Dmaven.junit.jvmargs=-Xmx2048m -Dmaven.compile.fork=true -Dmaven.javadoc.skip=true
 
 export GOPATH=~/gowork
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_60.jdk/Contents/Home
