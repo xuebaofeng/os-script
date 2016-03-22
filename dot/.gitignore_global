@@ -13,3 +13,6 @@ bin
 *.eml
 *.userlibraries
 i.sh
+logging.properties
+lc.groovy
+

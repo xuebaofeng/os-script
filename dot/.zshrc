@@ -1,5 +1,5 @@
 # Path to your oh-my-zsh installation.
-xport ZSH=$HOME/.oh-my-zsh
+export ZSH=$HOME/.oh-my-zsh
 
 # Set name of the theme to load.
 # Look in ~/.oh-my-zsh/themes/
@@ -75,7 +75,7 @@ export EDITOR='vim'
 # users are encouraged to define aliases within the ZSH_CUSTOM folder.
 # For a full list of active aliases, run `alias`.
 alias g='git'
-alias mvn=mvn -T 2C -Dmaven.junit.fork=true -Dmaven.junit.jvmargs=-Xmx2048m -Dmaven.compile.fork=true -Dmaven.javadoc.skip=true
+alias mvn='mvn -T 2C -Dmaven.junit.fork=true -Dmaven.junit.jvmargs=-Xmx2048m -Dmaven.compile.fork=true -Dmaven.javadoc.skip=true'
 
 export GOPATH=~/gowork
 export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_60.jdk/Contents/Home
