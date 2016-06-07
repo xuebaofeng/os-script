@@ -1,5 +1,4 @@
 0 16 * * * ~/github/os-script/sh/backup.sh
 0 16 * * * rm "/Users/$(whoami)/Library/Application Support/Beyond Compare/registry.dat"
 0 16 * * * python /Users/bxue/github/os-script/py/classify.py
-0 16 * * * V2EX-SIGN
 
