@@ -6,3 +6,6 @@ git clone https://github.com/clvv/fasd
 cd fasd 
 sudo make install
 pip install classifier
+
+#install sdkman
+curl -s "https://get.sdkman.io" | bash
