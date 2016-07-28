@@ -1,4 +1,14 @@
 [core]
-	excludesfile = /home/i854966/.gitignore_global
+	excludesfile = ~/.gitignore_global
 [user]
 	name = Baofeng Xue
+[pull]
+	rebase = true
+[alias]
+	co = checkout
+	br = branch
+    stash = stash save -u
+    squash = "!f(){ git reset --soft HEAD~${1} && git commit --edit -m\"$(git log --format=%B --reverse HEAD..HEAD@{1})\"; };f"
+    st = status
+    hist = log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short
+    wow = log --all --graph --decorate --oneline --simplify-by-decoration
