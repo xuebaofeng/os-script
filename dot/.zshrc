@@ -1,5 +1,5 @@
 # Path to your oh-my-zsh installation.
-export ZSH=$HOME/.oh-my-zsh
+  export ZSH=/home/i854966/.oh-my-zsh
 
 # Set name of the theme to load.
 # Look in ~/.oh-my-zsh/themes/
@@ -27,20 +27,20 @@ ZSH_THEME="robbyrussell"
 # DISABLE_AUTO_TITLE="true"
 
 # Uncomment the following line to enable command auto-correction.
-ENABLE_CORRECTION="true"
+# ENABLE_CORRECTION="true"
 
 # Uncomment the following line to display red dots whilst waiting for completion.
-COMPLETION_WAITING_DOTS="true"
+# COMPLETION_WAITING_DOTS="true"
 
 # Uncomment the following line if you want to disable marking untracked files
 # under VCS as dirty. This makes repository status check for large repositories
 # much, much faster.
-DISABLE_UNTRACKED_FILES_DIRTY="true"
+# DISABLE_UNTRACKED_FILES_DIRTY="true"
 
 # Uncomment the following line if you want to change the command execution time
 # stamp shown in the history command output.
 # The optional three formats: "mm/dd/yyyy"|"dd.mm.yyyy"|"yyyy-mm-dd"
-HIST_STAMPS="yyyy-mm-dd"
+# HIST_STAMPS="mm/dd/yyyy"
 
 # Would you like to use another custom folder than $ZSH/custom?
 # ZSH_CUSTOM=/path/to/new-custom-folder
@@ -49,20 +49,23 @@ HIST_STAMPS="yyyy-mm-dd"
 # Custom plugins may be added to ~/.oh-my-zsh/custom/plugins/
 # Example format: plugins=(rails git textmate ruby lighthouse)
 # Add wisely, as too many plugins slow down shell startup.
-plugins=(git,mvn)
+plugins=(git)
 
 # User configuration
 
-export PATH=$HOME/bin:/usr/local/bin:$PATH
+# export PATH="/usr/bin:/bin:/usr/sbin:/sbin:$PATH"
 # export MANPATH="/usr/local/man:$MANPATH"
-
 
 
 # You may need to manually set your language environment
 # export LANG=en_US.UTF-8
 
 # Preferred editor for local and remote sessions
-export EDITOR='vim'
+# if [[ -n $SSH_CONNECTION ]]; then
+#   export EDITOR='vim'
+# else
+#   export EDITOR='mvim'
+# fi
 
 # Compilation flags
 # export ARCHFLAGS="-arch x86_64"
@@ -74,18 +77,18 @@ export EDITOR='vim'
 # plugins, and themes. Aliases can be placed here, though oh-my-zsh
 # users are encouraged to define aliases within the ZSH_CUSTOM folder.
 # For a full list of active aliases, run `alias`.
-alias g='git'
-alias mvn='mvn -T 2C -Dmaven.junit.fork=true -Dmaven.junit.jvmargs=-Xmx2048m -Dmaven.compile.fork=true -Dmaven.javadoc.skip=true'
-
-export GOPATH=~/gowork
-export JAVA_HOME=/Library/Java/JavaVirtualMachines/jdk1.8.0_60.jdk/Contents/Home
-export GRADLE_HOME=/Applications/gradle-2.9
-export M2_HOME=/Applications/apache-maven-3.3.9
-export SCALA_HOME=~/Downloads/scala-2.11.7
-export INTELLIJ_HOME=/Applications/IntelliJ\ IDEA\ 15.app/Contents/MacOS
-export ANDROID_HOME=/usr/local/opt/android-sdk
-export PATH=$SCALA_HOME\bin:$INTELLIJ_HOME:$SCALA_HOME/bin:$GOPATH/bin:$GRADLE_HOME/bin:$JAVA_HOME/bin:$M2_HOME/bin:$PATH
-
+#
+# Example aliases
+# alias zshconfig="mate ~/.zshrc"
+# alias ohmyzsh="mate ~/.oh-my-zsh"
 eval "$(fasd --init auto)"
-
+source /etc/bash.bashrc.local
 source $ZSH/oh-my-zsh.sh
+setopt PROMPT_SUBST
+
+#THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
+export SDKMAN_DIR="/home/i854966/.sdkman"
+[[ -s "/home/i854966/.sdkman/bin/sdkman-init.sh" ]] && source "/home/i854966/.sdkman/bin/sdkman-init.sh"
+
+#THIS MUST BE AT THE END OF THE FILE FOR JENV TO WORK!!!
+[[ -s "/home/i854966/.jenv/bin/jenv-init.sh" ]] && source "/home/i854966/.jenv/bin/jenv-init.sh" && source "/home/i854966/.jenv/commands/completion.sh"

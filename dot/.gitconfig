@@ -1,32 +1,4 @@
-[filter "lfs"]
-	clean = git-lfs clean %f
-	smudge = git-lfs smudge %f
-	required = true
-[user]
-	nanme = "Baofeng Xue"
 [core]
-	excludesfile = ~/.gitignore_global
-	autocrlf = input
-
-[diff]
-	tool = kdiff3
-[merge]
-	tool = kdiff3
-	conflictstyle = diff3
-
-[difftool "sourcetree"]
-	cmd = opendiff \"$LOCAL\" \"$REMOTE\"
-	path = 
-[mergetool "sourcetree"]
-	cmd = /Applications/SourceTree.app/Contents/Resources/opendiff-w.sh \"$LOCAL\" \"$REMOTE\" -ancestor \"$BASE\" -merge \"$MERGED\"
-	trustExitCode = true
-[pull]
-	rebase = true
-[alias]
-	co = checkout
-	br = branch
-    stash = stash save -u
-    squash = "!f(){ git reset --soft HEAD~${1} && git commit --edit -m\"$(git log --format=%B --reverse HEAD..HEAD@{1})\"; };f"
-    st = status
-    hist = log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short
-    wow = log --all --graph --decorate --oneline --simplify-by-decoration
+	excludesfile = /home/i854966/.gitignore_global
+[user]
+	name = Baofeng Xue
