@@ -89,3 +89,7 @@ export SDKMAN_DIR="/home/i854966/.sdkman"
 
 #THIS MUST BE AT THE END OF THE FILE FOR JENV TO WORK!!!
 [[ -s "/home/i854966/.jenv/bin/jenv-init.sh" ]] && source "/home/i854966/.jenv/bin/jenv-init.sh" && source "/home/i854966/.jenv/commands/completion.sh"
+
+alias t='tail -f'
+
+
