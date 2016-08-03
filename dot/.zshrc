@@ -84,11 +84,11 @@ source $ZSH/oh-my-zsh.sh
 setopt PROMPT_SUBST
 
 #THIS MUST BE AT THE END OF THE FILE FOR SDKMAN TO WORK!!!
-export SDKMAN_DIR="/home/i854966/.sdkman"
-[[ -s "/home/i854966/.sdkman/bin/sdkman-init.sh" ]] && source "/home/i854966/.sdkman/bin/sdkman-init.sh"
+export SDKMAN_DIR="~/.sdkman"
+[[ -s "~/.sdkman/bin/sdkman-init.sh" ]] && source "~/.sdkman/bin/sdkman-init.sh"
 
 #THIS MUST BE AT THE END OF THE FILE FOR JENV TO WORK!!!
-[[ -s "/home/i854966/.jenv/bin/jenv-init.sh" ]] && source "/home/i854966/.jenv/bin/jenv-init.sh" && source "/home/i854966/.jenv/commands/completion.sh"
+[[ -s "~/.jenv/bin/jenv-init.sh" ]] && source "~/.jenv/bin/jenv-init.sh" && source "~/.jenv/commands/completion.sh"
 
 alias t='tail -f'
 

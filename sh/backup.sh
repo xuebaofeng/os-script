@@ -8,6 +8,8 @@ cp ~/.gitconfig ./dot/
 cp ~/.gitignore_global ./dot/
 cp ~/.vimrc ./dot/
 
+cp ~/au.sh ./sh/
+
 crontab -l > ./dot/.crontab
 
 git add -A
