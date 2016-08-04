@@ -2,5 +2,11 @@ rem https://my.vmware.com/web/vmware/free#desktop_end_user_computing/vmware_work
 
 cd %HOMEPATH%
 vmrun suspend Downloads\Bizx2.0.1-b1602a\Bizx2.0.vmx
-robocopy Downloads\Bizx2.0.1-b1602a Downloads\vm-backup
+
+
+@echo off
+For /f "tokens=2-4 delims=/ " %%a in ('date /t') do (set mydate=%%c-%%a-%%b)
+echo %mydate%
+
+robocopy Downloads\Bizx2.0.1-b1602a Downloads\%mydate%
 pause
