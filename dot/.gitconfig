@@ -14,3 +14,5 @@
     wow = log --all --graph --decorate --oneline --simplify-by-decoration
 [credential]
 	helper = store
+[remote "origin"]
+	proxy = 
