@@ -91,5 +91,6 @@ export SDKMAN_DIR="~/.sdkman"
 [[ -s "~/.jenv/bin/jenv-init.sh" ]] && source "~/.jenv/bin/jenv-init.sh" && source "~/.jenv/commands/completion.sh"
 
 alias t='tail -f'
+alias g='gradle'
 
 
