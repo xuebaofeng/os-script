@@ -1,4 +1,4 @@
-cd %HOMEPATH%\github\os-script
+cd %USERPROFILE%\github\os-script
 
 git pull
 
