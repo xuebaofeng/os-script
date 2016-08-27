@@ -93,4 +93,4 @@ export SDKMAN_DIR="~/.sdkman"
 alias t='tail -f'
 alias g='gradle'
 
-
+export SMART_SWITCHER_DIR=~/github/smart_switcher-master; source $SMART_SWITCHER_DIR/smart_switcher.sh
