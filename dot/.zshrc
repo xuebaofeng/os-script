@@ -2,7 +2,7 @@ export ZSH=$HOME/.oh-my-zsh
 
 ZSH_THEME="maran"
 
-#plugins=(gradle svn)
+plugins=(gradle svn)
 
 eval "$(fasd --init auto)"
 
@@ -11,7 +11,7 @@ source $ZSH/oh-my-zsh.sh
 
 setopt PROMPT_SUBST
 
-export SMART_SWITCHER_DIR=~/github/smart_switcher-master; source $SMART_SWITCHER_DIR/smart_switcher.sh
+#export SMART_SWITCHER_DIR=~/github/smart_switcher-master; source $SMART_SWITCHER_DIR/smart_switcher.sh
 
 export CATALINA_HOME=/data/sfsf/workspace/trunk/tomcat-sfs
 
