@@ -15,4 +15,7 @@
 [credential]
 	helper = store
 [remote "origin"]
-	proxy = 
+	proxy =
+
+[http]
+    proxy = http://proxy:8080
