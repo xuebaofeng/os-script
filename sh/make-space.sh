@@ -3,6 +3,10 @@ rm -rf ~/.ivy2/cache/com.successfactors
 rm -rf ~/.IdeaIC2016.2/system
 rm -rf /data/sfsf/workspace/trunk/jboss-sfs
 rm -rf /data/sfsf/workspace/trunk/tomcat-sfs
-sudo find /data/sfsf/workspace -name target -exec rm -rf {} \;
-sudo find /data/sfsf/workspace -name .gradle -exec rm -rf {} \;
+cd /data/
+rm -rf flash_recovery
+rm -rf .Trash-1004
+cd sfsf
+rm -rf eclipse_workspace
 
+find /data/sfsf/workspace -name target -type d -exec rm -rf {} \;
