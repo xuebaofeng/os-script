@@ -1,5 +1,6 @@
 #install zsh, git
 
+apt install zsh
 chsh -s /bin/zsh
 
 cd ~
