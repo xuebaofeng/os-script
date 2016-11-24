@@ -25,4 +25,4 @@ curl -s "https://get.sdkman.io" | bash
 #copy config
 cd ~/github
 git clone https://github.com/xuebaofeng/os-script.git
-cp ~/github/os-script/dot/* ~/
+rsync -aP ~/github/os-script/dot/ ~/
