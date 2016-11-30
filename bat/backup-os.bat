@@ -1,7 +1,8 @@
 cd %USERPROFILE%\github\os-script
 
-git pull
+copy "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\startup.bat" .\bat
 
+git pull
 git add -A
 git commit -m 'backup'
 git push
