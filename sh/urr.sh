@@ -1,7 +1,18 @@
 #!/usr/bin/env bash
-cd /data/sfsf/workspace/trunk/build-system
-svn update
-cd /data/sfsf/workspace/trunk/au-V4
-svn update
-rr-tomcat.sh
-#~/rr-jboss.sh
+
+APPLICATION_SERVER=$1
+
+if [ $# -eq 0 ]
+    then
+        APPLICATION_SERVER="tomcat"
+fi
+
+if [ $2 = "update" ]
+    then
+        update-svn.sh
+fi
+
+cp /data/sfsf/workspace/trunk/build-system/sfs-local-overrides/${APPLICATION_SERVER}-dev-docker-oracle/build.properties /data/sfsf/workspace/trunk/build-system/
+
+rebuild-${APPLICATION_SERVER}.sh
+rr-${APPLICATION_SERVER}.sh
