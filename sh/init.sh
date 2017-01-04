@@ -1,8 +1,7 @@
 #install zsh, git
 
-apt-get install -y zsh
+apt-get install -y zsh curl git rsync python-pip
 chsh -s $(which zsh) $(whoami)
-
 
 cd ~
 mkdir github
