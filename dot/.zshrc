@@ -9,14 +9,11 @@ eval "$(fasd --init auto)"
 source /etc/bash.bashrc.local
 source $ZSH/oh-my-zsh.sh
 
-setopt PROMPT_SUBST
+#setopt PROMPT_SUBST
 
 export CATALINA_HOME=/data/sfsf/workspace/trunk/tomcat-sfs
-export GIT_CURL_VERBOSE=1
-
-alias g='gradle'
-alias t='tail -f $CATALINA_HOME/logs/catalina.out'
-alias e-zsh='vim ~/.zshrc'
+export REGISTRY=saas-docker-dub.mo.sap.corp
+export PATH=~/github/os-script/sh:$PATH
 alias showproxy='env | grep -i proxy && cat ~/.curlrc'
 
 # Set Proxy
