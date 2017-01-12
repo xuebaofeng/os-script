@@ -16,7 +16,7 @@ sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/i
 #install fasd
 git clone https://github.com/clvv/fasd
 cd ~/github/fasd 
-sudo make install
+make install
 
 
 #install classifier
