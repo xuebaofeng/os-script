@@ -1,8 +1,10 @@
 #install zsh, git
 
-apt-get install -y zsh
-chsh -s $(which zsh) $(whoami)
+add-apt-repository ppa:gnome-terminator
+apt-get update
 
+apt-get install -y zsh curl git rsync python-pip terminator
+chsh -s $(which zsh) $(whoami)
 
 cd ~
 mkdir github
@@ -14,7 +16,7 @@ sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/i
 #install fasd
 git clone https://github.com/clvv/fasd
 cd ~/github/fasd 
-sudo make install
+make install
 
 
 #install classifier

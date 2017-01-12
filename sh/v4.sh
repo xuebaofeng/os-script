@@ -7,12 +7,8 @@ if [ $# -eq 0 ]
         APPLICATION_SERVER="tomcat"
 fi
 
-if [ $2 = "update" ]
-    then
-        update-svn.sh
-fi
-
 cp /data/sfsf/workspace/trunk/build-system/sfs-local-overrides/${APPLICATION_SERVER}-dev-docker-oracle/build.properties /data/sfsf/workspace/trunk/build-system/
 
+restart-docker.sh
 rebuild-${APPLICATION_SERVER}.sh
 rr-${APPLICATION_SERVER}.sh
