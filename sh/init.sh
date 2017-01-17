@@ -1,6 +1,6 @@
 #install zsh, git
-
-add-apt-repository ppa:gnome-terminator
+# run with sudo -E 
+add-apt-repository -y ppa:gnome-terminator
 apt-get update
 
 apt-get install -y zsh curl git rsync python-pip terminator
