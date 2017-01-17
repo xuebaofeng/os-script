@@ -19,9 +19,6 @@ cd ~/github/fasd
 make install
 
 
-#install classifier
-pip install classifier
-
 #install sdkman, jenv
 curl -s "https://get.sdkman.io" | bash
 
