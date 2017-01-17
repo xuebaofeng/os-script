@@ -3,7 +3,7 @@
 add-apt-repository -y ppa:gnome-terminator
 apt-get update
 
-apt-get install -y zsh curl git rsync python-pip terminator
+apt-get install -y zsh curl git rsync python-pip terminator vim
 chsh -s $(which zsh) $(whoami)
 
 cd ~
