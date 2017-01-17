@@ -8,7 +8,7 @@ add-apt-repository -y ppa:gnome-terminator
 apt-get update
 
 apt-get install -y zsh curl git rsync python-pip terminator vim
-apt install docker.io
+apt install -y docker.io htop
 chsh -s $(which zsh) $(whoami)
 
 #clone git
