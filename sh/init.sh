@@ -1,4 +1,7 @@
-#run with sudo -E 
+if [ $(id -u) -ne 0 ]; then
+  echo "This script must be run as root";
+  exit 1;
+fi
 
 #install packages
 add-apt-repository -y ppa:gnome-terminator
