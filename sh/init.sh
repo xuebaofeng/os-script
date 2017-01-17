@@ -1,11 +1,13 @@
-#install zsh, git
-# run with sudo -E 
+#run with sudo -E 
+
+#install packages
 add-apt-repository -y ppa:gnome-terminator
 apt-get update
 
 apt-get install -y zsh curl git rsync python-pip terminator vim
 chsh -s $(which zsh) $(whoami)
 
+#clone git
 cd ~
 mkdir github
 cd github
