@@ -22,6 +22,8 @@ function setproxy() {
   echo 'proxy = 10.14.126.17:8080' > ~/.curlrc
   echo 'Acquire::http::Proxy "http://10.14.126.17:8080";' > /etc/apt/apt.conf
   echo 'Acquire::https::Proxy "http://10.14.126.17:8080";' >> /etc/apt/apt.conf
+  echo 'use_proxy=yes' > ~/.wgetrc
+  echo 'http_proxy=10.14.126.17:8080' >> ~/.wgetrc
   showproxy
 }
 
@@ -29,6 +31,7 @@ function setproxy() {
 function unsetproxy() {
   unset {http,https,ftp}_proxy
   rm ~/.curlrc
+  rm ~/.wgetrc
   rm /etc/apt/apt.conf
   showproxy
 }
