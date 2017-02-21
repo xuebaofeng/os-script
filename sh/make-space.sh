@@ -4,6 +4,8 @@ rm -rf ~/.IdeaIC2016.2/system
 rm -rf ~/.IdeaIC2016.3/system
 rm -rf /data/sfsf/workspace/trunk/jboss-sfs
 rm -rf /data/sfsf/workspace/trunk/tomcat-sfs
+rm -rf /data/sfsf/workspace/trunk/.gradle/2.14.1
+
 cd /data/
 rm -rf flash_recovery
 rm -rf .Trash-1004

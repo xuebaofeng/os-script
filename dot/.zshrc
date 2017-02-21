@@ -15,7 +15,7 @@ export CATALINA_HOME=/data/sfsf/workspace/trunk/tomcat-sfs
 export REGISTRY=saas-docker-dub.mo.sap.corp
 export PATH=~/github/os-script/sh:$PATH
 alias showproxy='env | grep -i proxy && cat ~/.curlrc'
-
+alias gradle='gradle --profile'
 # Set Proxy
 function setproxy() {
   export {http,https,ftp}_proxy="http://10.14.126.17:8080"
