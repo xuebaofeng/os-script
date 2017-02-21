@@ -18,20 +18,18 @@ alias showproxy='env | grep -i proxy && cat ~/.curlrc'
 alias gradle='gradle --profile'
 # Set Proxy
 function setproxy() {
-  export {http,https,ftp}_proxy="http://10.14.126.17:8080"
-  echo 'proxy = 10.14.126.17:8080' > ~/.curlrc
-  echo 'Acquire::http::Proxy "http://10.14.126.17:8080";' > /etc/apt/apt.conf
-  echo 'Acquire::https::Proxy "http://10.14.126.17:8080";' >> /etc/apt/apt.conf
-  echo 'use_proxy=yes' > ~/.wgetrc
-  echo 'http_proxy=10.14.126.17:8080' >> ~/.wgetrc
+  export {http,https,ftp}_proxy="http://proxy:8080"
+  git config --global http.proxy http://proxy:8080
+  git config --global https.proxy http://proxy:8080
+  echo 'proxy = proxy:8080' > ~/.curlrc
   showproxy
 }
 
 # Unset Proxy
 function unsetproxy() {
   unset {http,https,ftp}_proxy
+  git config --global --unset http.proxy
+  git config --global --unset https.proxy
   rm ~/.curlrc
-  rm ~/.wgetrc
-  rm /etc/apt/apt.conf
   showproxy
 }
