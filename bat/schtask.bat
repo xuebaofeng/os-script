@@ -3,3 +3,6 @@ schtasks /create /sc WEEKLY /tn "backup vm" /tr "%USERPROFILE%\github\os-script\
 
 schtasks /Delete /TN "backup os" /F
 schtasks /create /sc daily /tn "backup os" /tr "%USERPROFILE%\github\os-script\bat\backup-os.bat" /st 12:30
+
+schtasks /Delete /TN "backup to sap github" /F
+schtasks /create /sc daily /tn "backup to sap github" /tr "%USERPROFILE%\github\os-script\bat\backup-to-sap-github.bat" /st 12:30
