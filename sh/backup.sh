@@ -1,17 +1,15 @@
 #!/usr/bin/env bash
+#sudo cp ~/github/os-script/sh/backup.sh /etc/cron.daily/
 
-cd ~/github/os-script
-git pull
+backup_dir="/mnt/hgfs/vm"
 
-cp ~/.zshrc ./dot/
-cp ~/.gitconfig ./dot/
-cp ~/.gitignore_global ./dot/
-cp ~/.vimrc ./dot/
+dirs=(dot sh)
+if [ ! -d "${backup_dir}/dot" ]; then
+  mkdir ${backup_dir}/dot
+fi
 
-cp ~/*.sh ./sh/
-
-crontab -l > ./dot/.crontab
-
-git add -A
-git commit -m 'backup'
-git push
+files=(zshrc zsh_history gitconfig vimrc)
+for item in ${files[*]}
+do
+    cp  ~/.$item ${backup_dir}/dot/
+done
