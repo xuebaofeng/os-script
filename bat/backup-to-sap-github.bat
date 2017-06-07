@@ -1,4 +1,5 @@
-cd %USERPROFILE%\github\backup
+set location="c:\wbem"
+cd %location%\github\backup
 git pull
 
 copy %USERPROFILE%\Downloads\my-umatrix-rules*.txt .\chrome\umatrix\

@@ -4,8 +4,9 @@ cd %USERPROFILE%
 vmrun suspend Downloads\DEV3.0\DEV3.0.vmx
 
 @echo off
-For /f "tokens=2-4 delims=/ " %%a in ('date /t') do (set mydate=%%c-%%a-%%b)
+
+set mydate=%date:~6,4%-%date:~3,2%-%date:~0,2%
 echo %mydate%
 
-robocopy Downloads\DEV3.0 Downloads\%mydate% /xf *.log *.lock *.vmem
+robocopy Downloads\DEV3.0 g:\vm\%mydate% /xf *.log *.lock *.vmem *.gz *.dmp *.vmss *.vmxf *.vmsd
 pause
