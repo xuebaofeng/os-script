@@ -8,5 +8,5 @@ vmrun suspend Downloads\DEV3.0\DEV3.0.vmx
 set mydate=%date:~6,4%-%date:~3,2%-%date:~0,2%
 echo %mydate%
 
-robocopy Downloads\DEV3.0 g:\vm\%mydate% /xf *.log *.lock *.vmem *.gz *.dmp *.vmss *.vmxf *.vmsd
+robocopy Downloads\DEV3.0 g:\backup\vm\%mydate% /xf *.log *.lock *.vmem *.gz *.dmp *.vmss *.vmxf *.vmsd
 pause
