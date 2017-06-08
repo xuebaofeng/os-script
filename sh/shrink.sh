@@ -1,4 +1,5 @@
- 
+#!/usr/bin/env bash
+
 disk_list=`sudo vmware-toolbox-cmd disk list`
  
 for disk in ${disk_list}
