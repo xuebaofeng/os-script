@@ -1,5 +1,4 @@
-cd c:\PortableApps\FreeFileSyncPortable\App\FreeFileSync\
-FreeFileSync backup.ffs_batch
+c:\PortableApps\FreeFileSyncPortable\App\FreeFileSync\FreeFileSync %USERPROFILE%\Dropbox\conf\backup.ffs_batch
 
 set location="c:\wbem"
 cd %location%\github\os-script
