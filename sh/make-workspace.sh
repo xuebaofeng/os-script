@@ -2,8 +2,9 @@
 cd /data/sfsf/workspace
 mkdir trunk
 cd trunk
-svn co http://svn.successfactors.com/repos/modules/V4/trunk au-V4
-svn co http://svn.successfactors.com/repos/build-system/trunk build-system
+git clone https://github.wdf.sap.corp/bizx/au-V4.git V4 --depth 1
+git clone https://github.wdf.sap.corp/bizx/build-system.git --depth 1
+
 cd build-system
 gradle configureWorkspace
 
