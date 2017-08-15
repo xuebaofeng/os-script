@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
 redeploy.sh
-restart-tomcat.sh "$@"
+restart-v4.sh "$@"
