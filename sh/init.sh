@@ -30,6 +30,7 @@ make install
 
 #install sdkman, jenv
 curl -s "https://get.sdkman.io" | bash
+sudo chown -R $(whoami) ~/.sdkman
 
 #copy config
 cd ~/github
