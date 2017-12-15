@@ -38,6 +38,9 @@ choco install -y pdfxchangeviewer
 choco install -y proxyswitcher
 choco install -y peerblock
 choco install -y slack
+choco install -y searchmyfiles
+choco install -y syncthing
+choco install -y tcpview
 choco install -y teracopy
 choco install -y telegram
 choco install -y vmwareplayer
