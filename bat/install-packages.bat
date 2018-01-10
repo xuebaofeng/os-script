@@ -33,6 +33,7 @@ choco install -y keepass
 choco install -y meld
 choco install -y netease-cloudmusic
 choco install -y notepadplusplus
+choco install -y openssh
 choco install -y pdfxchangeeditor
 choco install -y pdfxchangeviewer
 choco install -y proxyswitcher
