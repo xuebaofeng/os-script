@@ -1,1 +1,2 @@
-runas /savecred /profile /user:Administrator choco update all -f -y
+choco update all -y
+pause
