@@ -1,9 +1,12 @@
 [core]
 	excludesfile = ~/.gitignore_global
+	autocrlf = input
 [user]
-	name = Baofeng Xue
+	name = i854966
+	email = baofeng.xue@sap.com
 [pull]
 	rebase = true
+	ff = only
 [alias]
 	co = checkout
 	br = branch
@@ -12,20 +15,28 @@
     st = status
     hist = log --pretty=format:'%h %ad | %s%d [%an]' --graph --date=short
     wow = log --all --graph --decorate --oneline --simplify-by-decoration
+	append = town append
+	hack = town hack
+	kill = town kill
+	new-pull-request = town new-pull-request
+	prepend = town prepend
+	prune-branches = town prune-branches
+	rename-branch = town rename-branch
+	repo = town repo
+	ship = town ship
+	sync = town sync
+	up = "!git remote update -p; git merge --ff-only @{u}"
 [credential]
-	helper = store
+	helper = /usr/share/doc/git/contrib/credential/gnome-keyring/git-credential-gnome-keyring
 [remote "origin"]
 	proxy =
 
+[push]
+	default = matching
+
+[branch]
+	autosetuprebase = always
 [http]
+	proxy = http://proxy:8080
 [https]
-[http]
-[https]
-[http]
-[https]
-[http]
-[https]
-[http]
-[https]
-[http]
-[https]
+	proxy = http://proxy:8080

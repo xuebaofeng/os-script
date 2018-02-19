@@ -8,12 +8,15 @@ eval "$(fasd --init auto)"
 
 source /etc/bash.bashrc.local
 source $ZSH/oh-my-zsh.sh
+source "$HOME/.sdkman/bin/sdkman-init.sh"
 
 #setopt PROMPT_SUBST
 
 export CATALINA_HOME=/data/sfsf/workspace/trunk/tomcat-sfs
 export REGISTRY=saas-docker-dub.mo.sap.corp
 export PATH=~/github/os-script/sh:$PATH
+export PATH=$PATH:/usr/local/go/bin
+
 alias showproxy='env | grep -i proxy && cat ~/.curlrc'
 alias gradle='gradle --profile'
 # Set Proxy

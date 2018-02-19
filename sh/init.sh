@@ -36,3 +36,6 @@ sudo chown -R $(whoami) ~/.sdkman
 cd ~/github
 git clone https://github.com/xuebaofeng/os-script.git
 rsync -aP ~/github/os-script/dot/ ~/
+
+cd ~
+sudo chown -R $(whoami) .
