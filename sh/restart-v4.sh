@@ -17,5 +17,5 @@ start-${database_type}.sh
 cd /data/sfsf/workspace/trunk
 cp build-system/sfs-local-overrides/tomcat-dev-docker-${database_type}/build.properties build-system/
 gradle updateTomcatSfs
-cd /data/sfsf/workspace/trunk/bizx-docker-dev
-$CATALINA_HOME/bin/startSFS.sh
+cd tomcat-sfs/bin
+./startSFS.sh
