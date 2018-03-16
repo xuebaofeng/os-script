@@ -16,6 +16,6 @@ printf "Argument database_type is %s\n" "${database_type}"
 start-${database_type}.sh
 cd /data/sfsf/workspace/trunk
 cp build-system/sfs-local-overrides/tomcat-dev-docker-${database_type}/build.properties build-system/
-gradle updateTomcatSfs
+gradle tomcatUpdateSfs
 cd tomcat-sfs/bin
 ./startSFS.sh
