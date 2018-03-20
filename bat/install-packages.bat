@@ -18,10 +18,12 @@ choco install -y ant
 choco install -y maven
 choco install -y gradle
 choco install -y intellijidea-community
+choco install -y openssh
+choco install -y meld
 
 choco install -y calibre
 choco install -y ditto
-choco install -y dropbox
+rem choco install -y dropbox
 choco install -y evernote
 choco install -y everthing
 choco install -y freefilesync
@@ -29,11 +31,9 @@ choco install -y foxitreader
 choco install -y googlechrome
 choco install -y imdisk-toolkit
 choco install -y io-unlocker
-choco install -y keepass
-choco install -y meld
+rem choco install -y keepass
 choco install -y netease-cloudmusic
 choco install -y notepadplusplus
-choco install -y openssh
 choco install -y pdfxchangeeditor
 choco install -y pdfxchangeviewer
 choco install -y proxyswitcher
@@ -41,9 +41,9 @@ choco install -y potplayer
 choco install -y peerblock
 choco install -y slack
 choco install -y searchmyfiles
-choco install -y splayer
-choco install -y syncthing
-choco install -y tcpview
+rem choco install -y splayer
+rem choco install -y syncthing
+rem choco install -y tcpview
 choco install -y teracopy
 choco install -y telegram
 choco install -y vmwareplayer
