@@ -41,3 +41,5 @@ rsync -aP ~/github/os-script/dot/ ~/
 
 cd
 chown -R $(whoami) .
+
+cp ~/github/os-script/sh/backup /etc/cron.hourly/
