@@ -9,17 +9,18 @@ rem choco install -y dotnet4.7
 rem choco install -y directx
 rem choco install -y flashplayerplugin
 
-choco install -y jdk8
-choco install -y curl
-choco install -y wget
 choco install -y android-sdk
-choco install -y git
 choco install -y ant
-choco install -y maven
+choco install -y curl
+choco install -y dbeaver
 choco install -y gradle
+choco install -y git
 choco install -y intellijidea-community
-choco install -y openssh
+choco install -y jdk8
+choco install -y maven
 choco install -y meld
+choco install -y openssh
+choco install -y wget
 
 choco install -y calibre
 choco install -y ditto
