@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-docker stop $(docker ps -a -q)
-docker container prune -f
+docker stop bizxdockerdev_oracle_1
+docker rm bizxdockerdev_oracle_1
 start-oracle.sh
