@@ -1,4 +1,4 @@
-c:\PortableApps\FreeFileSyncPortable\App\FreeFileSync\FreeFileSync %USERPROFILE%\onedrive\conf\office-c-f.ffs_batch
+"C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-f.ffs_batch
 
 set location="c:\wbem"
 cd %location%\github\os-script
