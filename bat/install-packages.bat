@@ -30,7 +30,6 @@ choco install -y everthing
 choco install -y freefilesync
 choco install -y foxitreader
 choco install -y googlechrome
-choco install -y google-pinyin
 choco install -y imdisk-toolkit
 choco install -y io-unlocker
 rem choco install -y keepass
