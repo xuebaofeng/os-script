@@ -10,17 +10,19 @@ rem choco install -y directx
 rem choco install -y flashplayerplugin
 
 choco install -y android-sdk
-choco install -y ant
-choco install -y curl
+REM choco install -y ant
+REM choco install -y curl
 choco install -y dbeaver
+choco install -y firacode
 choco install -y gradle
 choco install -y git
 choco install -y intellijidea-community
 choco install -y jdk8
-choco install -y maven
+REM choco install -y maven
 choco install -y meld
-choco install -y openssh
-choco install -y wget
+REM choco install -y openssh
+choco install -y visualstudiocode
+REM choco install -y wget
 
 choco install -y calibre
 choco install -y ditto
@@ -28,15 +30,15 @@ rem choco install -y dropbox
 choco install -y evernote
 choco install -y everthing
 choco install -y freefilesync
-choco install -y foxitreader
+REM choco install -y foxitreader
 choco install -y googlechrome
-choco install -y imdisk-toolkit
-choco install -y io-unlocker
+REM choco install -y imdisk-toolkit
+REM choco install -y io-unlocker
 rem choco install -y keepass
 choco install -y netease-cloudmusic
-choco install -y notepadplusplus
-choco install -y pdfxchangeeditor
-choco install -y pdfxchangeviewer
+REM choco install -y notepadplusplus
+REM choco install -y pdfxchangeeditor
+REM choco install -y pdfxchangeviewer
 choco install -y proxyswitcher
 choco install -y potplayer
 choco install -y peerblock
@@ -46,9 +48,9 @@ rem choco install -y splayer
 rem choco install -y syncthing
 rem choco install -y tcpview
 choco install -y teracopy
-choco install -y telegram
-choco install -y vmwareplayer
+REM choco install -y telegram
+REM choco install -y vmwareplayer
 choco install -y virtualbox
-choco install -y wechat
+REM choco install -y wechat
 choco install -y wincdemu
 
