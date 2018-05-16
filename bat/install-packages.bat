@@ -7,7 +7,6 @@ rem choco install -y vcredist2015
 rem choco install -y vcredist2017
 rem choco install -y dotnet4.7
 rem choco install -y directx
-rem choco install -y flashplayerplugin
 
 choco install -y android-sdk
 REM choco install -y ant
@@ -30,6 +29,7 @@ rem choco install -y dropbox
 choco install -y evernote
 choco install -y everthing
 choco install -y freefilesync
+choco install -y flashplayerplugin
 REM choco install -y foxitreader
 choco install -y googlechrome
 REM choco install -y imdisk-toolkit
