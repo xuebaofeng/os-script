@@ -11,7 +11,7 @@ unset https_proxy
 add-apt-repository -y ppa:gnome-terminator
 apt-get update
 apt-get remove -y vim-common
-apt-get install -y zsh curl git rsync python-pip terminator vim
+apt-get install -y zsh curl git rsync python-pip terminator vim clipit
 apt install -y docker.io htop
 chsh -s $(which zsh) $(whoami)
 usermod -s $(which zsh) $(whoami)
