@@ -12,15 +12,17 @@ choco install -y android-sdk
 REM choco install -y ant
 REM choco install -y curl
 choco install -y dbeaver
-choco install -y firacode
 choco install -y gradle
 choco install -y git
 choco install -y intellijidea-community
 choco install -y jdk8
 REM choco install -y maven
 choco install -y meld
+choco install -y microsoft-build-tools
 REM choco install -y openssh
-choco install -y visualstudiocode
+choco install -y rust-ms
+REM choco install -y visualstudiocode
+choco install vcbuildtools
 REM choco install -y wget
 
 choco install -y calibre
