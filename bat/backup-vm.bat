@@ -9,4 +9,5 @@ set mydate=%date:~-4%%date:~4,2%%date:~7,2%
 echo %mydate%
 
 robocopy DEV3.1 f:\backup\vm\%mydate% /xf *.log *.lock *.vmem *.gz *.dmp *.vmss *.vmxf *.vmsd
+robocopy DEV3.1 g:\backup\vm\%mydate% /xf *.log *.lock *.vmem *.gz *.dmp *.vmss *.vmxf *.vmsd
 pause
