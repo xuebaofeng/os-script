@@ -5,3 +5,5 @@ schtasks /create /sc WEEKLY /tn "backup os" /tr "%location%\backup-os.bat" /d MO
 
 schtasks /Delete /TN "backup to sap github" /F
 schtasks /create /sc WEEKLY /tn "backup to sap github" /tr "%location%\backup-to-sap-github.bat" /d MON,TUE,WED /st 12:30
+
+schtasks /create /sc WEEKLY /tn "Code update" /tr "%location%\code-update.bat" /d MON,TUE,WED,THURS  /st 12:30

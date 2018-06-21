@@ -19,6 +19,7 @@ choco install -y jdk8
 REM choco install -y maven
 choco install -y meld
 choco install -y microsoft-build-tools
+choco install -y nodejs
 REM choco install -y openssh
 choco install -y rust-ms
 REM choco install -y visualstudiocode
