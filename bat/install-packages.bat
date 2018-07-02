@@ -1,13 +1,3 @@
-rem choco install -y vcredist2005
-rem choco install -y vcredist2008
-rem choco install -y vcredist2010
-rem choco install -y vcredist2012
-rem choco install -y vcredist2013
-rem choco install -y vcredist2015
-rem choco install -y vcredist2017
-rem choco install -y dotnet4.7
-rem choco install -y directx
-
 choco install -y android-sdk
 REM choco install -y ant
 REM choco install -y curl
@@ -35,6 +25,7 @@ choco install -y freefilesync
 choco install -y flashplayerplugin
 REM choco install -y foxitreader
 choco install -y googlechrome
+choco install -y honeyview
 REM choco install -y imdisk-toolkit
 REM choco install -y io-unlocker
 rem choco install -y keepass
@@ -44,7 +35,7 @@ REM choco install -y pdfxchangeeditor
 REM choco install -y pdfxchangeviewer
 choco install -y proxyswitcher
 choco install -y potplayer
-choco install -y peerblock
+#choco install -y peerblock
 choco install -y slack
 choco install -y searchmyfiles
 rem choco install -y splayer
