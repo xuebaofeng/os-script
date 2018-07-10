@@ -1,5 +1,5 @@
 choco install -y android-sdk
-REM choco install -y ant
+choco install -y ant
 REM choco install -y curl
 choco install -y dbeaver
 choco install -y gradle
