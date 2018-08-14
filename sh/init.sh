@@ -12,7 +12,7 @@ add-apt-repository -y ppa:gnome-terminator
 apt-get update
 apt-get remove -y vim-common
 apt-get install -y zsh curl git rsync python-pip terminator vim clipit
-apt install -y docker.io htop
+apt install -y docker.io htop glances
 pip install docker-compose
 chsh -s $(which zsh) $(whoami)
 usermod -s $(which zsh) $(whoami)

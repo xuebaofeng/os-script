@@ -10,5 +10,5 @@ export REGISTRY=saas-docker-dub.mo.sap.corp
 docker-compose pull oracle
 
 cd /data/sfsf/workspace/trunk
-gradle upgradeTomcat
-gradle migrateTomcat
+gradle upgradeTomcat --stacktrace
+gradle migrateTomcat --stacktrace
