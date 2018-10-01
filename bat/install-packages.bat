@@ -44,7 +44,7 @@ rem choco install -y tcpview
 choco install -y teracopy
 REM choco install -y telegram
 REM choco install -y vmwareplayer
-choco install -y virtualbox
+rem choco install -y virtualbox
 REM choco install -y wechat
 choco install -y wincdemu
 
