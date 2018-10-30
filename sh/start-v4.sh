@@ -18,6 +18,5 @@ start-zookeeper.sh
 
 cd /data/sfsf/workspace/trunk
 cp -r build-system/sfs-local-overrides/tomcat-dev-docker-${database_type}/* tomcat-sfs
-gradle tomcatUpdateSfs
 cd tomcat-sfs/bin
 ./startSFS.sh

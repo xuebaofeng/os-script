@@ -1,9 +1,6 @@
 #!/usr/bin/env bash
 rm ~/java_error_in_IDEA.hprof
 rm -rf ~/.gradle/caches
-rm -rf ~/.IdeaIC2016.2
-rm -rf ~/.IdeaIC2016.3
-rm -rf ~/.IdeaIC2017.1/system
 rm -rf ~/.ivy2/cache/com.successfactors
 
 rm -rf /data/sfsf/workspace/trunk/jboss-sfs
