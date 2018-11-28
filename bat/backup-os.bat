@@ -1,3 +1,4 @@
+"C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-d.ffs_batch
 "C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-f.ffs_batch
 "C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-g.ffs_batch
 
