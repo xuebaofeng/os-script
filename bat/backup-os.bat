@@ -1,8 +1,3 @@
-"C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-d.ffs_batch
-"C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-f.ffs_batch
-"C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-g.ffs_batch
-"C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-h.ffs_batch
-
 set location="c:\wbem"
 cd %location%\github\os-script
 
@@ -12,3 +7,17 @@ git pull
 git add -A
 git commit -m 'backup'
 git push
+
+
+IF EXIST d:\backup (
+"C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-d.ffs_batch
+)
+IF EXIST f:\backup (
+"C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-f.ffs_batch
+)
+IF EXIST g:\backup (
+"C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-g.ffs_batch
+)
+IF EXIST h:\backup (
+"C:\Program Files\FreeFileSync\FreeFileSync.exe" %USERPROFILE%\onedrive\conf\office-c-h.ffs_batch
+)
