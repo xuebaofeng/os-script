@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 rm ~/java_error_in_IDEA.hprof
+
+rm -rf ~/.IdeaIC2018.2
 rm -rf ~/.gradle/caches
 rm -rf ~/.ivy2/cache/com.successfactors
 
