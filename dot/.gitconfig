@@ -26,17 +26,14 @@
 	ship = town ship
 	sync = town sync
 	up = "!git remote update -p; git merge --ff-only @{u}"
-[credential]
-	helper = /usr/share/doc/git/contrib/credential/gnome-keyring/git-credential-gnome-keyring
-[remote "origin"]
-	proxy =
+
 
 [push]
 	default = matching
 
 [branch]
 	autosetuprebase = always
-[http]
-	proxy = http://proxy:8080
-[https]
-	proxy = http://proxy:8080
+[merge]
+	ff = only
+[rebase]
+	autosquash = true
