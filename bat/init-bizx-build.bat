@@ -1,4 +1,4 @@
-cd C:\wbem\github.wdf.sap.corp
+cd C:\wbem\bizx
 git clone https://github.wdf.sap.corp/sfengservices/bizx-docker-dev.git
 git clone https://github.wdf.sap.corp/bizx/build-system.git
 
