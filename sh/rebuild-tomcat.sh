@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-cd /data/sfsf/workspace/trunk/
-gradle tomcatCleanSfs --stacktrace
-gradle tomcatGenerateSfs --stacktrace
+cd /mnt/c/wbem/bizx/
+./gradlew tomcatCleanSfs --stacktrace
+./gradlew tomcatGenerateSfs --stacktrace

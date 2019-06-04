@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-cd /data/sfsf/workspace/trunk/build-system
-gradle -u configureWorkspace
-cd /data/sfsf/workspace/trunk/
-gradle redeploy --stacktrace
+cd /mnt/c/wbem/bizx/build-system
+./configureWorkspace
+cd /mnt/c/wbem/bizx/
+./gradlew redeploy --stacktrace

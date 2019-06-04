@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-cd /data/sfsf/workspace/trunk/bizx-docker-dev
+cd /mnt/c/wbem/bizx/bizx-docker-dev
 docker-compose up -d hana
