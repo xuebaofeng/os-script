@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-cd /mnt/c/wbem/bizx/build-system
-./configureWorkspace
-cd /mnt/c/wbem/bizx/
+cw.sh
+cd /mnt/c/SAPDevelop/bizx/
 ./gradlew redeploy --stacktrace

@@ -1,4 +1,4 @@
-set location="c:\wbem"
+set location="c:\SAPDevelop"
 cd %location%\github\os-script
 
 copy "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\startup.bat" .\bat

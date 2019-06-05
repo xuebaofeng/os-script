@@ -1,5 +1,5 @@
 rem https://my.vmware.com/web/vmware/free#desktop_end_user_computing/vmware_workstation_player/12_0|PLAYER-1200|drivers_tools
-cd c:\wbem
+cd c:\SAPDevelop
 
 vmrun suspend DEV3.1.2\DEV3.1.2.vmx
 

@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-cd /mnt/c/wbem/bizx/bizx-docker-dev
+cd /mnt/c/SAPDevelop/bizx/bizx-docker-dev
 docker-compose up -d zookeeper

@@ -1,4 +1,4 @@
-set location="c:\wbem\github\os-script\bat"
+set location="c:\SAPDevelop\github\os-script\bat"
 
 schtasks /Delete /TN "backup os" /F
 schtasks /create /sc WEEKLY /tn "backup os" /tr "%location%\backup-os.bat" /d MON,TUE,WED  /st 12:30
