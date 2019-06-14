@@ -14,7 +14,7 @@ done
 printf "Argument database_type is %s\n" "${database_type}"
 
 
-cd /data/sfsf/workspace/trunk/bizx-docker-dev
+cd /mnt/c/SAPDevelop/bizx/bizx-docker-dev
 
 #US East region	saas-docker-nsq.mo.sap.corp
 #US West region	saas-docker-dub.mo.sap.corp

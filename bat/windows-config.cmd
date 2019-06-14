@@ -5,3 +5,7 @@ rem sc start "WSearch"
 
 rem disable bitlocker
 manage-bde c: -protectors -disable
+
+rem hyper v
+Enable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V –All
+rem Disable-WindowsOptionalFeature -Online -FeatureName Microsoft-Hyper-V-All

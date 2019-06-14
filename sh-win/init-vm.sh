@@ -7,6 +7,8 @@ fi
 unset http_proxy
 unset https_proxy
 
+gsettings set org.gnome.desktop.screensaver lock-enabled false
+
 #install packages
 add-apt-repository -y ppa:gnome-terminator
 apt-get update
