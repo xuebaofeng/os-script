@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-cd /mnt/c/SAPDevelop/bizx/
+cd /data/sfsf/workspace/trunk//
 ./gradlew tomcatCleanSfs --stacktrace
 ./gradlew tomcatGenerateSfs --stacktrace

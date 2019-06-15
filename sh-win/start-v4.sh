@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-cd /mnt/c/SAPDevelop/bizx/tomcat-sfs/bin
+cd /data/sfsf/workspace/trunk//tomcat-sfs/bin
 ./startSFS.sh

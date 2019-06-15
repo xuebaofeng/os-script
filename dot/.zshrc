@@ -12,7 +12,7 @@ source "$HOME/.sdkman/bin/sdkman-init.sh"
 
 #setopt PROMPT_SUBST
 
-export CATALINA_HOME=/mnt/c/SAPDevelop/bizx/tomcat-sfs
+export CATALINA_HOME=/data/sfsf/workspace/trunk//tomcat-sfs
 export REGISTRY=saas-docker-dub.mo.sap.corp
 export PATH=~/github/os-script/sh:$PATH
 export PATH=$PATH:/usr/local/go/bin

@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-cd /mnt/c/SAPDevelop/bizx/bizx-docker-dev
+cd /data/sfsf/workspace/trunk//bizx-docker-dev
 docker-compose up -d oracle

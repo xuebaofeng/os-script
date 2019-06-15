@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 cw.sh
-cd /mnt/c/SAPDevelop/bizx/
+cd /data/sfsf/workspace/trunk//
 ./gradlew redeploy --stacktrace

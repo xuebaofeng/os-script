@@ -13,23 +13,24 @@ gsettings set org.gnome.desktop.screensaver lock-enabled false
 add-apt-repository -y ppa:gnome-terminator
 apt-get update
 apt-get remove -y vim-common
-apt-get install -y zsh curl git rsync python-pip terminator vim clipit
+apt-get install -y curl git rsync python-pip terminator vim clipit
 apt install -y docker.io htop glances
 pip install docker-compose
-chsh -s $(which zsh) $(whoami)
-usermod -s $(which zsh) $(whoami)
+chsh -s $(which bash) $(whoami)
+usermod -s $(which bash) $(whoami)
 
 #clone git
 cd
 mkdir github
 cd github
 
-#install oh-my-zsh
-sh -c "$(curl -fsSL https://raw.github.com/robbyrussell/oh-my-zsh/master/tools/install.sh)"
 
 #install fasd
+cd ~
+mkdir github
+cd github
 git clone https://github.com/clvv/fasd
-cd ~/github/fasd 
+cd fasd
 make install
 
 
