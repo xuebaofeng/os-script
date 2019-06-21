@@ -7,3 +7,5 @@ chown -R $(whoami) ~/.sdkman
 cd ~
 chown -R $(whoami) .
 
+devchef docker
+devchef sap_jdk8

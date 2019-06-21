@@ -13,3 +13,5 @@ apt-get remove -y vim-common
 apt-get install -y curl git rsync python-pip terminator vim clipit fasd
 apt install -y docker.io htop glances
 pip install docker-compose
+
+ufw disable
