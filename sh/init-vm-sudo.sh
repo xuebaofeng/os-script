@@ -10,7 +10,7 @@ add-apt-repository -y ppa:gnome-terminator
 add-apt-repository -y ppa:aacebedo/fasd
 apt-get update
 apt-get remove -y vim-common
-apt-get install -y curl git rsync python-pip terminator vim clipit fasd
+apt-get install -y curl git rsync python-pip terminator vim clipit fasd dos2unix
 apt install -y docker.io htop glances
 pip install docker-compose
 
