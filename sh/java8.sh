@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-export JAVA_HOME=/mnt/c/SAPDevelop/sapjvm_8-linux
+export JAVA_HOME=/usr/java/latest
 export PATH=$JAVA_HOME/bin:$PATH
