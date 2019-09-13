@@ -5,7 +5,7 @@ choco install -y dbeaver
 choco install -y gradle
 choco install -y git
 choco install -y intellijidea-community
-choco install -y jdk8
+choco install -y jdk8 -params 'installdir=c:\\sapdevelop\\java8'
 REM choco install -y maven
 choco install -y meld
 choco install -y microsoft-build-tools
