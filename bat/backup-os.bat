@@ -2,7 +2,7 @@ set location="c:\SAPDevelop"
 cd %location%\github\os-script
 
 copy "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\startup.bat" .\bat
-
+copy C:\Windows\System32\drivers\etc\hosts C:\Users\i854966\OneDrive\conf
 git pull
 git add -A
 git commit -m 'backup'
