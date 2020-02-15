@@ -1,26 +1,22 @@
-choco install -y android-sdk
-choco install -y ant
+rem choco install -y android-sdk
+rem choco install -y ant
 REM choco install -y curl
-choco install -y dbeaver
 choco install -y gradle
 choco install -y git
 choco install -y intellijidea-community
-choco install -y jdk8 -params 'installdir=c:\\sapdevelop\\java8'
 REM choco install -y maven
-choco install -y meld
-choco install -y microsoft-build-tools
-choco install -y nodejs
+rem choco install -y meld
+rem choco install -y microsoft-build-tools
+rem choco install -y nodejs
 REM choco install -y openssh
-choco install -y rust-ms
+rem choco install -y rust-ms
 REM choco install -y visualstudiocode
-choco install vcbuildtools
+rem choco install vcbuildtools
 REM choco install -y wget
 
 choco install -y calibre
-choco install -y ditto
 rem choco install -y dropbox
-choco install -y evernote
-choco install -y everthing
+rem choco install -y evernote
 choco install -y freefilesync
 choco install -y flashplayerplugin
 REM choco install -y foxitreader
@@ -34,17 +30,16 @@ REM choco install -y notepadplusplus
 REM choco install -y pdfxchangeeditor
 REM choco install -y pdfxchangeviewer
 choco install -y proxyswitcher
-choco install -y potplayer
-#choco install -y peerblock
+rem choco install -y potplayer
+rem choco install -y peerblock
 choco install -y slack
-choco install -y searchmyfiles
+rem choco install -y searchmyfiles
 rem choco install -y splayer
 rem choco install -y syncthing
 rem choco install -y tcpview
-choco install -y teracopy
+rem choco install -y teracopy
 REM choco install -y telegram
-REM choco install -y vmwareplayer
 rem choco install -y virtualbox
 REM choco install -y wechat
-choco install -y wincdemu
+rem choco install -y wincdemu
 

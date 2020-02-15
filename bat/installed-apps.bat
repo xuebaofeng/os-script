@@ -6,9 +6,6 @@ rem clonespy 3.42
 rem ConEmu 19.5.26.0
 rem coretemp 1.14
 rem curl 7.65.1
-rem dbeaver 6.1.0
-rem ditto.install 3.22.20.0
-rem Everything 1.4.1935.20190602
 rem fiddler 5.0.20192.25091
 rem flashplayeractivex 32.0.0.207
 rem flashplayerplugin 32.0.0.207
@@ -18,7 +15,6 @@ rem honeyview 5.31
 rem hwmonitor 1.39
 rem intellijidea-community 2019.1.3
 rem io-unlocker 1.1.2.1
-rem Listary 5.00.2843
 rem mp3tag 2.95
 rem netease-cloudmusic 2.1.0
 rem notepadplusplus 7.7
