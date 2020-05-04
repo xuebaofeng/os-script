@@ -16,9 +16,8 @@ wmic pagefileset where name="C:\\pagefile.sys" set InitialSize=2048,MaximumSize=
 
 # remove windows 10 apps
 
-get-appxpackage *photos* | remove-appxpackage
-
-get-appxpackage *zunevideo* | remove-appxpackage
 
 DISM /online /disable-feature /featurename:WindowsMediaPlayer
 Disable-WindowsOptionalFeature -Online -FeatureName "WindowsMediaPlayer"
+
+mklink /j "%UserProfile%\OneDrive\backup" C:\Users\I854966\Downloads\

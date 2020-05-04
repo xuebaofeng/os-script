@@ -1,3 +1,4 @@
 #!/usr/bin/env bash
 cd /data/sfsf/workspace/trunk/bizx-docker-dev
-docker-compose up -d hana
+export DBTYPE=hana2
+docker-compose up -d hana2
