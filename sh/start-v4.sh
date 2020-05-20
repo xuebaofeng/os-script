@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-start-zookeeper.sh
-cd /data/sfsf/workspace/trunk/tomcat-sfs/bin
+start-services.sh
+cd ${bx_bizx_repo_path}/tomcat-sfs/bin
 ./startSFS.sh

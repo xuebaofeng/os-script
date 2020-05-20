@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-cd /data/sfsf/workspace/trunk/build-system
+cd ${bx_bizx_repo_path}/build-system
 ./configureWorkspace
