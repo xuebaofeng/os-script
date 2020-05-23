@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-cd ${bx_bizx_repo_path}/
+cd ${GRADLE_WORKSPACE}/
 ./gradlew tomcatCleanSfs --stacktrace
 ./gradlew tomcatGenerateSfs --stacktrace

@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-cd ${bx_bizx_repo_path}/build-system
+cd ${GRADLE_WORKSPACE}/build-system
 ./configureWorkspace

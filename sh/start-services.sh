@@ -1,3 +1,3 @@
 #!/usr/bin/env bash
-cd ${bx_bizx_repo_path}/bizx-docker-dev
+cd ${GRADLE_WORKSPACE}/bizx-docker-dev
 docker-compose up -d zookeeper kafka hana2

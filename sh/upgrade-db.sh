@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
-cd ${bx_bizx_repo_path}/
+cd ${GRADLE_WORKSPACE}/
 ./gradlew upgradeTomcat --stacktrace  -Dargs="-devMode"
 ./gradlew migrateTomcat --stacktrace
