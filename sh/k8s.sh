@@ -37,7 +37,7 @@ done
 docker exec -it kind-control-plane /bin/sh -c "cp /usr/share/ca-certificates/sap/*.* /etc; update-ca-certificates 2>/dev/null"
 
 ## install kubectl
-yay -S kubectl
+#yay -S kubectl
 
 ## install controller
 helm upgrade -i kubernetes-bizxenvironment-controller /shared/github.wdf/bizx-controller/helm --set image.tag=0.8.9
@@ -48,7 +48,7 @@ kubectl apply -f ${KCBX}/pv-tomcat.yaml
 kubectl apply -f ${KCBX}/pvc-tomcat.yaml
 kubectl delete MutatingWebhookConfiguration kubernetes-bizxenvironment-controller
 kubectl delete ValidatingWebhookConfiguration kubernetes-bizxenvironment-controller
-kubectl apply -f ${KCBX}/BizX_HANA_Local.yaml
+kubectl apply -f ${KCBX}/mybizx-newcode-HANA-local.yaml
 
 
 # dashboard
