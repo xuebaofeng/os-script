@@ -1,4 +1,5 @@
 kubectl version --client
+
 kubectl cluster-info
 
 sudo ll /var/lib/rancher/k3s/agent/images/
@@ -10,3 +11,6 @@ kubectl -n local-path-storage get pod
 kubectl -n local-path-storage logs -f local-path-provisioner-
 
 kubectl get storageclass,pvc,pv
+
+
+kubectl logs -f bx-cf-
