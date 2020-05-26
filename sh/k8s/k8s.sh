@@ -42,4 +42,7 @@ docker exec -it kind-control-plane /bin/sh -c "cp /usr/share/ca-certificates/sap
 ## install controller
 helm upgrade -i kubernetes-bizxenvironment-controller /shared/k8s/helm --set image.tag=0.8.9
 
+## helm test
+#helm template /shared/k8s/helm
+
 
