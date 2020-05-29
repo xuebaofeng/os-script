@@ -1,21 +1,26 @@
+cd /shared/k8s/
 export K3S_KUBECONFIG_MODE="644"
-#export INSTALL_K3S_EXEC=" --no-deploy servicelb --no-deploy traefik"
-curl -sfL https://get.k3s.io | sh -
-#sudo systemctl status k3s
+
+FILE=./k3s
+if [ -f "$FILE" ]; then
+    echo "$FILE exist"
+else
+    echo "$FILE does not exist"
+    curl -Lo $FILE https://get.k3s.io
+    chmod +x $FILE
+    $FILE
+fi
 
 ## setup
 export KUBECONFIG=/etc/rancher/k3s/k3s.yaml
 
 ## load docker images
-sudo mkdir /var/lib/rancher/k3s/agent/images/
-sudo cp /shared/k8s/*.tar /var/lib/rancher/k3s/agent/images/
-sudo systemctl restart k3s
+#sudo mkdir /var/lib/rancher/k3s/agent/images/
+#for f in /shared/k8s/*.tar; do
+#  echo "sudo rsync -av --progress sudo cp $f /var/lib/rancher/k3s/agent/images/"
+#  sudo rsync -av --progress sudo cp $f /var/lib/rancher/k3s/agent/images/
+#done
 
-## list docker images
-sudo k3s crictl images
+#sudo systemctl restart k3s
 
 kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
-
-## uninstall
-#/usr/local/bin/k3s-uninstall.sh
-
