@@ -24,3 +24,6 @@ sudo rsync -av --progress sudo cp /shared/k8s/bizx_kafka.tar /var/lib/rancher/k3
 sudo rsync -av --progress sudo cp /shared/k8s/bizx_tomcat_empty.tar /var/lib/rancher/k3s/agent/images/
 sudo rsync -av --progress sudo cp /shared/k8s/bizx_zookeeper.tar /var/lib/rancher/k3s/agent/images/
 
+sudo systemctl stop k3s
+sudo systemctl disable k3s
+
