@@ -2,7 +2,6 @@
 cd ${GRADLE_WORKSPACE}
 #stop-services.sh
 cw.sh
-gradle clean
 rm -rf tomcat-sfs/webapps/ROOT/
 rm -rf .gradle-build-cache/
 rm -rf .gradle/
