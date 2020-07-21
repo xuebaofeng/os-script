@@ -4,4 +4,5 @@ yes | cp ${GRADLE_WORKSPACE}/build-system/sfs-local-overrides/tomcat-dev-docker-
 cd ${GRADLE_WORKSPACE}/
 ./gradlew --stop
 ./gradlew clean
-./gradlew redeploy --stacktrace --profile --info
+#./gradlew redeploy --stacktrace --profile --info
+./gradlew redeploy
