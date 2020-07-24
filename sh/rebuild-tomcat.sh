@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 cd ${GRADLE_WORKSPACE}/
-./gradlew tomcatCleanSfs --stacktrace
+cw.sh
 ./gradlew tomcatGenerateSfs --stacktrace

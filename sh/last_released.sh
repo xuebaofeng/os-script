@@ -32,7 +32,7 @@ do_release () {
     echo git checkout tags/$version -b last_released
     git checkout tags/$version -b last_released
     cd $SF_TRUNK/$f
-    git stash pop
+#    git stash pop
     describe=$(git describe)
     echo "$f checkedout to $describe"
     cd $SF_TRUNK

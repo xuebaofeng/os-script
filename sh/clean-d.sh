@@ -1,18 +1,18 @@
 #!/usr/bin/env bash
 cd ${GRADLE_WORKSPACE}
-#stop-services.sh
-cw.sh
-rm -rf tomcat-sfs/webapps/ROOT/
+sudo chown -R bx:bx .
 rm -rf .gradle-build-cache/
 rm -rf .gradle/
 rm -rf .idea/
 rm -rf reports/
 rm -rf build/
 rm -rf gradle/
-#rm -rf tomcat-sfs/sf_lib/
-#rm -rf tomcat-sfs/sf_saml1_lib/
-#rm -rf tomcat-sfs/sf_saml2_lib/
-rm -rf tomcat-sfs/temp/
-rm -rf tomcat-sfs/work/
-find ${GRADLE_WORKSPACE}/au-V4 -name build -type d -exec rm -rf {} \;
-find ${GRADLE_WORKSPACE}/build-system/ -name build -type d -exec rm -rf {} \;
+rm -rf tomcat-sfs/
+rm -rf build-system/build/
+rm -rf build-system/.gradle/
+rm -rf au-V4/au-V4-ui/build/
+rm -rf au-V4/au-V4-web/build/
+rm -rf au-V4/au-V4-service/build/
+yes | cp ./build-system/sfs-local-overrides/tomcat-dev-docker-hana/gradle-local.properties ./build-system/gradle/properties/
+rebuild-tomcat.sh
+

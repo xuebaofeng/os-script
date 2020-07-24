@@ -8,8 +8,7 @@ export GRADLE_WORKSPACE=/shared/gradle_workspace
 export PATH=/shared/github/os-script/sh/:$PATH
 export GRADLE_USER_HOME=/shared/.gradle
 export GRADLE_WORKSPACE=/shared/gradle_workspace
-export ANT_HOME=/home/bx/.sdkman/candidates/ant/1.10.1
-
+export MVN_HOME=/home/bx/.sdkman/candidates/maven/current
 alias ll='ls -alth'
 alias sudo='sudo '
 
