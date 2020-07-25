@@ -21,6 +21,11 @@ yay -S --noconfirm dbeaver
 yay -S --noconfirm intellijidea-community
 yay -S --noconfirm glances
 
+# fix vmware tools file share function
+sudo mkdir /mnt/hgfs
+cd /usr/bin
+sudo ./vmhgfs-fuse -o allow_other -o auto_unmount /mnt/hgfs
+
 curl -s "https://get.sdkman.io" | bash
 sdk install gradle 6.4.1
 sdk install ant 1.10.1
