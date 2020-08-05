@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-#newgrp docker
-log4j2_location=/shared
+#m-share.sh
+log4j2_location=/mnt/hgfs/vm
 if [ -f ${log4j2_location}/log4j2-compose.xml ]; then
     echo "${log4j2_location}/log4j2-compose.xml exist"
 else
