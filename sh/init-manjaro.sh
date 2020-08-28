@@ -23,15 +23,15 @@ yay -S --noconfirm intellijidea-community
 yay -S --noconfirm glances
 yay -S --noconfirm ruby
 yay -S --noconfirm graphviz
+yay -S --noconfirm ncdu
+yay -S --noconfirm npm
 
 gem install soloist
 #/home/bx/.gem/ruby/2.7.0/gems/soloist-1.0.3/bin/soloist
 gem install librarian-chef
 
 # fix vmware tools file share function
-sudo mkdir /mnt/hgfs
-cd /usr/bin
-sudo ./vmhgfs-fuse -o allow_other -o auto_unmount /mnt/hgfs
+m-share.sh
 
 curl -s "https://get.sdkman.io" | bash
 sdk install gradle 6.4.1

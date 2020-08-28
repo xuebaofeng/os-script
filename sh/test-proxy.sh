@@ -2,6 +2,7 @@
 set -e
 cw.sh
 cd ${GRADLE_WORKSPACE}/au-V4/au-V4-service/
+gradle test --tests com.successfactors.proxy.util.ProxyImportEventTest
 gradle test --tests com.successfactors.proxy.bean.ProxyTimeBeanTest
 gradle test --tests com.successfactors.proxy.*  
 
