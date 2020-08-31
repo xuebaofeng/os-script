@@ -43,3 +43,6 @@ rem choco install -y virtualbox
 REM choco install -y wechat
 rem choco install -y wincdemu
 
+choco install -y microsoft-teams
+choco install -y office365proplus
+

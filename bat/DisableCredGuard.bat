@@ -33,13 +33,3 @@ mountvol X: /d
 echo.
 echo Disable Hyper-V if the feature is installed on Windows:
 bcdedit /set hypervisorlaunchtype off
-
-REM This is how to enable again:
-REM bcdedit /set hypervisorlaunchtype auto
-REM Otherwise, you can turn off the Hyper-V feature in Control Panel\Programs\Programs and Features -> Turn Windows features on or off
-
-
-echo.
-echo IMPORTANT: Save your work, close applications as needed, then press any key to restart immediately.
-pause
-shutdown /r /t 00
