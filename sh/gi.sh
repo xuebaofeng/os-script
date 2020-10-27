@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 cd ${GRADLE_WORKSPACE}
-gradle idea
-
+gradle idea  -x npmInstall 
+#-x websrcInstall

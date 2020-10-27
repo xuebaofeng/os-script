@@ -7,3 +7,4 @@ else
 fi
 cd ${GRADLE_WORKSPACE}/
 git clone https://github.wdf.sap.corp/bizx/$1.git
+gi.sh

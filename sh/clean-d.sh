@@ -13,8 +13,10 @@ rm -rf build-system/.gradle/
 rm -rf au-V4/au-V4-ui/build/
 rm -rf au-V4/au-V4-web/build/
 rm -rf au-V4/au-V4-service/build/
+rm -rf au-upgradecenter/build/
 rm -rf au-upgradecenter/au-upgradecenter-ui/build/
 rm -rf au-upgradecenter/au-upgradecenter-web/build/
+rm -rf au-upgradecenter/au-upgradecenter-web/node_modules/
 rm -rf au-upgradecenter/au-upgradecenter-service/build/
 rm -rf au-upgradecenter/au-upgradecenter-dependencies/
 yes | cp ./build-system/sfs-local-overrides/tomcat-dev-docker-hana/gradle-local.properties ./build-system/gradle/properties/
