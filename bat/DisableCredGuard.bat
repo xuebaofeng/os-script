@@ -1,9 +1,6 @@
 @echo off
 
 
-echo IMPORTANT: Please check if you're running with Administrator privileges. This script only works with Administrator privileges.
-pause
-
 echo.
 echo Delete registry settings:
 REM reg delete HKEY_LOCAL_MACHINE\System\CurrentControlSet\Control\LSA /v LsaCfgFlags /f
@@ -33,3 +30,5 @@ mountvol X: /d
 echo.
 echo Disable Hyper-V if the feature is installed on Windows:
 bcdedit /set hypervisorlaunchtype off
+
+remove-browser-manage.bat

@@ -1,9 +1,6 @@
 choco list --local-only
 rem 7zip 19.0
-rem ant 1.10.5
-rem calibre 3.44.0
 rem clonespy 3.42
-rem ConEmu 19.5.26.0
 rem coretemp 1.14
 rem curl 7.65.1
 rem fiddler 5.0.20192.25091
@@ -12,17 +9,13 @@ rem flashplayerplugin 32.0.0.207
 rem git 2.22.0
 rem gradle 5.4.1
 rem honeyview 5.31
-rem hwmonitor 1.39
 rem intellijidea-community 2019.1.3
 rem io-unlocker 1.1.2.1
-rem mp3tag 2.95
 rem netease-cloudmusic 2.1.0
 rem notepadplusplus 7.7
 rem openssh 7.9.0.1
 rem postman 7.1.1
-rem python 3.7.3
 rem python3 3.7.3
 rem slack 3.4.3
-rem smplayer 19.5.0
 rem speedfan 4.52.0.20181220
 rem wincdemu 4.1.0.20171221

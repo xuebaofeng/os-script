@@ -14,7 +14,7 @@ REM choco install -y visualstudiocode
 rem choco install vcbuildtools
 REM choco install -y wget
 
-choco install -y calibre
+rem choco install -y calibre
 rem choco install -y dropbox
 rem choco install -y evernote
 choco install -y freefilesync
@@ -25,11 +25,11 @@ choco install -y honeyview
 REM choco install -y imdisk-toolkit
 REM choco install -y io-unlocker
 rem choco install -y keepass
-choco install -y netease-cloudmusic
+rem choco install -y netease-cloudmusic
 REM choco install -y notepadplusplus
 REM choco install -y pdfxchangeeditor
 REM choco install -y pdfxchangeviewer
-choco install -y proxyswitcher
+rem choco install -y proxyswitcher
 rem choco install -y potplayer
 rem choco install -y peerblock
 choco install -y slack
@@ -45,4 +45,4 @@ rem choco install -y wincdemu
 
 choco install -y microsoft-teams
 choco install -y office365proplus
-
+choco install -y glasswire
