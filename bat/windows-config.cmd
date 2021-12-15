@@ -15,5 +15,5 @@ DISM /online /disable-feature /featurename:WindowsMediaPlayer
 rem Disable-WindowsOptionalFeature -Online -FeatureName "WindowsMediaPlayer"
 rem mklink /j "%UserProfile%\OneDrive\backup" C:\Users\I854966\Downloads\
 
-reg delete HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Mozilla /f
-reg delete HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Google /f
+@REM reg delete HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Mozilla /f
+@REM reg delete HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Google /f

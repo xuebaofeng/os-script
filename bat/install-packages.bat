@@ -18,7 +18,7 @@ rem choco install -y calibre
 rem choco install -y dropbox
 rem choco install -y evernote
 choco install -y freefilesync
-choco install -y flashplayerplugin
+@REM choco install -y flashplayerplugin
 REM choco install -y foxitreader
 choco install -y googlechrome
 choco install -y honeyview
@@ -32,7 +32,7 @@ REM choco install -y pdfxchangeviewer
 rem choco install -y proxyswitcher
 rem choco install -y potplayer
 rem choco install -y peerblock
-choco install -y slack
+@REM choco install -y slack
 rem choco install -y searchmyfiles
 rem choco install -y splayer
 rem choco install -y syncthing
@@ -43,6 +43,6 @@ rem choco install -y virtualbox
 REM choco install -y wechat
 rem choco install -y wincdemu
 
-choco install -y microsoft-teams
-choco install -y office365proplus
-choco install -y glasswire
+@REM choco install -y microsoft-teams
+@REM choco install -y office365proplus
+@REM choco install -y glasswire
