@@ -1,0 +1,1 @@
+mklink /J %userprofile%\OneDrive\PortableApps c:\PortableApps
