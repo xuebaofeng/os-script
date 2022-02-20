@@ -17,3 +17,5 @@ rem mklink /j "%UserProfile%\OneDrive\backup" C:\Users\I854966\Downloads\
 
 @REM reg delete HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Mozilla /f
 @REM reg delete HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Google /f
+
+winget uninstall MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy
