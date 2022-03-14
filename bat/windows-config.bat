@@ -6,7 +6,7 @@ wmic pagefileset where name="C:\\pagefile.sys" set InitialSize=2048,MaximumSize=
 
 powercfg.exe /hibernate off
 
-DISM /online /disable-feature /featurename:WindowsMediaPlayer
+DISM /online /disable-feature /featurename:WindowsMediaPlayer /NoRestart
 
 winget uninstall MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy
 

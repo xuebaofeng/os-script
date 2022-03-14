@@ -1,5 +1,7 @@
-# remove windows 10 apps
+
+Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy Unrestricted -Force
+
 get-appxpackage *photos* | remove-appxpackage
 get-appxpackage *zunevideo* | remove-appxpackage
-DISM /online /disable-feature /featurename:WindowsMediaPlayer
-Disable-WindowsOptionalFeature -Online -FeatureName "WindowsMediaPlayer"
+get-appxpackage Microsoft.GamingServices | remove-AppxPackage -allusers
+
