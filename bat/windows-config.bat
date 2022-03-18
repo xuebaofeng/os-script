@@ -10,3 +10,4 @@ DISM /online /disable-feature /featurename:WindowsMediaPlayer /NoRestart
 
 winget uninstall MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy
 
+netsh advfirewall set all state off
