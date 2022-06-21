@@ -1,4 +1,4 @@
-tee -a file.txt <<EOF
+tee -a ~/.vnc/config <<EOF
 session=xfce
 geometry=2560x1440
 alwaysshared
