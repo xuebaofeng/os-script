@@ -1,0 +1,1 @@
+"C:\Program Files\FreeFileSync\FreeFileSync.exe" "G:\My Drive\conf\backup-dcim.ffs_batch"
