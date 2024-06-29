@@ -6,8 +6,6 @@ wmic pagefileset where name="C:\\pagefile.sys" set InitialSize=2048,MaximumSize=
 
 powercfg.exe /hibernate off
 
-DISM /online /disable-feature /featurename:WindowsMediaPlayer /NoRestart
-
-winget uninstall MicrosoftWindows.Client.WebExperience_cw5n1h2txyewy
-
-netsh advfirewall set all state off
+takeown /F "C:\$Windows.~BT\*" /A /R /D Y
+icacls "C:\$Windows.~BT\*.*" /grant *S-1-5-32-544:F /T /C /Q
+RD /S /Q "C:\$Windows.~BT"
