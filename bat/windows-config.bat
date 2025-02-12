@@ -9,3 +9,5 @@ powercfg.exe /hibernate off
 takeown /F "C:\$Windows.~BT\*" /A /R /D Y
 icacls "C:\$Windows.~BT\*.*" /grant *S-1-5-32-544:F /T /C /Q
 RD /S /Q "C:\$Windows.~BT"
+
+tzutil /s "Pacific Standard Time"
