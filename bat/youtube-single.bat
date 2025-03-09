@@ -1,4 +1,4 @@
-set video="https://www.youtube.com/watch?v=GJrcH6G_ZDQ"
+set video="https://www.youtube.com/watch?v=kTJczUoc26U"
 cd C:\green\bin
 set ffmpeg="Z:\green\yt-dlp-gui\ffmpeg.exe"
-yt-dlp --ffmpeg-location %ffmpeg% -P "C:/baidunetdiskdownload" %video%
+yt-dlp --ffmpeg-location %ffmpeg% -f ba -P "C:/baidunetdiskdownload" %video%
