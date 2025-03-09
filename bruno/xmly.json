@@ -1,0 +1,188 @@
+{
+  "name": "xmly",
+  "version": "1",
+  "items": [
+    {
+      "type": "http",
+      "name": "getTracksList",
+      "seq": 2,
+      "request": {
+        "url": "https://www.ximalaya.com/revision/album/v1/getTracksList?albumId=47995479&pageSize=30&pageNum=1",
+        "method": "GET",
+        "headers": [
+          {
+            "name": "Cookie",
+            "value": "_xmLog=h5&961184b4-4290-4645-a2b8-80b8e32bf1ab&2.4.18-alpha.0; wfp=ACMwMzdmNmQxM2Q4ODJhMTUwyGDioyYHEK94bXdlYl93d3c; HWWAFSESID=62658247f2600efb387; HWWAFSESTIME=1741464820700; DATE=1741413750899; cmci9xde=U2FsdGVkX19VMpXCXqQgYNSUdAZVx4D/G/esbUxZUYECfKX7zq6/SYWPKVykM3qQNA7Eifr/JTCFFyfCZEIvKQ==; pmck9xge=U2FsdGVkX18uLMGJZqIphMTyDmKY6aAZ6032SnKsDMU=; crystal=U2FsdGVkX1+dY4MzmXQUA0n78UUw4eXGjtcJ4z6zD7N+AfWx9FRsMruDQCDDZ2sFgDSGuhQwnLmXV+KFHFwo3CENZXT6m1KJl0gaNT80WfJ+UGM+RwAKknfLzRYqeeajXmsiOIgtTCh9Atwz9ZnC4RzC33ce0+1i/RkQwOfj0Bwc21WkH0fk97aexB9Y00OwZXJwPSOl3284zQ5yFDELzAyswQoEye2u55ZV89VK/2os9Fi97hFTvQXexB6bLo+U; vmce9xdq=U2FsdGVkX1/HRu/HZQB9NyZfPXTTokrrXTCXS7mwED0W7C0p5pThPuLigpiINg1O5oogdNItWAewTXbfjpLjNsGLr4fsCWGIDLawZCI7/ms/d/5SEcEt9S3Qk6soX6Ksw4tOnoMyOxtErUIaEJbNvCsNYU0VuKPSsiUpqlg+uwI=; assva6=U2FsdGVkX1+iMNMPcKOXhD9BqXtPwCdGrlMXvIR5kiM=; assva5=U2FsdGVkX1+oSaWVrCbCm95ia/3MUzYA5CN8z6tqWwchQHgDjmNcDEnvLroZNRosaG33wVsyHRieD6IpmKR3Fg==; xm-page-viewid=ximalaya-web; impl=www.ximalaya.com.login; 1&remember_me=y; 1&_token=42807439&78C48A10340N6EC54445916FEDE43F5C752EA7B9A3CC30AE4F1B8CF1375257474EB3F2EEDCF528M002AD0D10F3D7D0_; 1_l_flag=42807439&78C48A10340N6EC54445916FEDE43F5C752EA7B9A3CC30AE4F1B8CF1375257474EB3F2EEDCF528M002AD0D10F3D7D0__2025-03-0904:34:16; web_login=1741465991655",
+            "enabled": true
+          },
+          {
+            "name": "User-Agent",
+            "value": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; Win64; x64; Trident/4.0; .NET CLR 2.0.50727; SLCC2; .NET CLR 3.5.30729; .NET CLR 3.0.30729; .NET4.0C; .NET4.0E; InfoPath.3)",
+            "enabled": true
+          },
+          {
+            "name": "Referer",
+            "value": "https://www.ximalaya.com",
+            "enabled": true
+          },
+          {
+            "name": "xm-sign",
+            "value": "D2JBl5r+xd5EzKY/KWY/KpPic8pJUFmVAvYroIo/t7gXIXa1&&N9g78wvpNLaguGMwtRAx9tOgDBjj5KqYkWUNWLxmgyg_1",
+            "enabled": true
+          }
+        ],
+        "params": [
+          {
+            "name": "albumId",
+            "value": "47995479",
+            "type": "query",
+            "enabled": true
+          },
+          {
+            "name": "pageSize",
+            "value": "30",
+            "type": "query",
+            "enabled": true
+          },
+          {
+            "name": "pageNum",
+            "value": "1",
+            "type": "query",
+            "enabled": true
+          }
+        ],
+        "body": {
+          "mode": "none",
+          "formUrlEncoded": [],
+          "multipartForm": [],
+          "file": []
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "docs": "",
+        "auth": {
+          "mode": "none"
+        }
+      }
+    },
+    {
+      "type": "http",
+      "name": "getTrack",
+      "seq": 3,
+      "request": {
+        "url": "https://www.ximalaya.com/tracks/452879769.json",
+        "method": "GET",
+        "headers": [
+          {
+            "name": "Cookie",
+            "value": "_xmLog=h5&961184b4-4290-4645-a2b8-80b8e32bf1ab&2.4.18-alpha.0; wfp=ACMwMzdmNmQxM2Q4ODJhMTUwyGDioyYHEK94bXdlYl93d3c; HWWAFSESID=62658247f2600efb387; HWWAFSESTIME=1741464820700; DATE=1741413750899; cmci9xde=U2FsdGVkX19VMpXCXqQgYNSUdAZVx4D/G/esbUxZUYECfKX7zq6/SYWPKVykM3qQNA7Eifr/JTCFFyfCZEIvKQ==; pmck9xge=U2FsdGVkX18uLMGJZqIphMTyDmKY6aAZ6032SnKsDMU=; crystal=U2FsdGVkX1+dY4MzmXQUA0n78UUw4eXGjtcJ4z6zD7N+AfWx9FRsMruDQCDDZ2sFgDSGuhQwnLmXV+KFHFwo3CENZXT6m1KJl0gaNT80WfJ+UGM+RwAKknfLzRYqeeajXmsiOIgtTCh9Atwz9ZnC4RzC33ce0+1i/RkQwOfj0Bwc21WkH0fk97aexB9Y00OwZXJwPSOl3284zQ5yFDELzAyswQoEye2u55ZV89VK/2os9Fi97hFTvQXexB6bLo+U; vmce9xdq=U2FsdGVkX1/HRu/HZQB9NyZfPXTTokrrXTCXS7mwED0W7C0p5pThPuLigpiINg1O5oogdNItWAewTXbfjpLjNsGLr4fsCWGIDLawZCI7/ms/d/5SEcEt9S3Qk6soX6Ksw4tOnoMyOxtErUIaEJbNvCsNYU0VuKPSsiUpqlg+uwI=; assva6=U2FsdGVkX1+iMNMPcKOXhD9BqXtPwCdGrlMXvIR5kiM=; assva5=U2FsdGVkX1+oSaWVrCbCm95ia/3MUzYA5CN8z6tqWwchQHgDjmNcDEnvLroZNRosaG33wVsyHRieD6IpmKR3Fg==; xm-page-viewid=ximalaya-web; impl=www.ximalaya.com.login; 1&remember_me=y; 1&_token=42807439&78C48A10340N6EC54445916FEDE43F5C752EA7B9A3CC30AE4F1B8CF1375257474EB3F2EEDCF528M002AD0D10F3D7D0_; 1_l_flag=42807439&78C48A10340N6EC54445916FEDE43F5C752EA7B9A3CC30AE4F1B8CF1375257474EB3F2EEDCF528M002AD0D10F3D7D0__2025-03-0904:34:16; web_login=1741465991655",
+            "enabled": true
+          },
+          {
+            "name": "User-Agent",
+            "value": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; Win64; x64; Trident/4.0; .NET CLR 2.0.50727; SLCC2; .NET CLR 3.5.30729; .NET CLR 3.0.30729; .NET4.0C; .NET4.0E; InfoPath.3)",
+            "enabled": true
+          },
+          {
+            "name": "Referer",
+            "value": "https://www.ximalaya.com",
+            "enabled": true
+          },
+          {
+            "name": "xm-sign",
+            "value": "D2JBl5r+xd5EzKY/KWY/KpPic8pJUFmVAvYroIo/t7gXIXa1&&N9g78wvpNLaguGMwtRAx9tOgDBjj5KqYkWUNWLxmgyg_1",
+            "enabled": true
+          }
+        ],
+        "params": [],
+        "body": {
+          "mode": "none",
+          "formUrlEncoded": [],
+          "multipartForm": [],
+          "file": []
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "docs": "",
+        "auth": {
+          "mode": "none"
+        }
+      }
+    },
+    {
+      "type": "http",
+      "name": "getTrack - xmlyfetcher",
+      "seq": 4,
+      "request": {
+        "url": "http://mobile.ximalaya.com/v1/track/baseInfo?device=iPhone&trackId=452879769",
+        "method": "GET",
+        "headers": [
+          {
+            "name": "Cookie",
+            "value": "_xmLog=h5&961184b4-4290-4645-a2b8-80b8e32bf1ab&2.4.18-alpha.0; wfp=ACMwMzdmNmQxM2Q4ODJhMTUwyGDioyYHEK94bXdlYl93d3c; HWWAFSESID=62658247f2600efb387; HWWAFSESTIME=1741464820700; DATE=1741413750899; cmci9xde=U2FsdGVkX19VMpXCXqQgYNSUdAZVx4D/G/esbUxZUYECfKX7zq6/SYWPKVykM3qQNA7Eifr/JTCFFyfCZEIvKQ==; pmck9xge=U2FsdGVkX18uLMGJZqIphMTyDmKY6aAZ6032SnKsDMU=; crystal=U2FsdGVkX1+dY4MzmXQUA0n78UUw4eXGjtcJ4z6zD7N+AfWx9FRsMruDQCDDZ2sFgDSGuhQwnLmXV+KFHFwo3CENZXT6m1KJl0gaNT80WfJ+UGM+RwAKknfLzRYqeeajXmsiOIgtTCh9Atwz9ZnC4RzC33ce0+1i/RkQwOfj0Bwc21WkH0fk97aexB9Y00OwZXJwPSOl3284zQ5yFDELzAyswQoEye2u55ZV89VK/2os9Fi97hFTvQXexB6bLo+U; vmce9xdq=U2FsdGVkX1/HRu/HZQB9NyZfPXTTokrrXTCXS7mwED0W7C0p5pThPuLigpiINg1O5oogdNItWAewTXbfjpLjNsGLr4fsCWGIDLawZCI7/ms/d/5SEcEt9S3Qk6soX6Ksw4tOnoMyOxtErUIaEJbNvCsNYU0VuKPSsiUpqlg+uwI=; assva6=U2FsdGVkX1+iMNMPcKOXhD9BqXtPwCdGrlMXvIR5kiM=; assva5=U2FsdGVkX1+oSaWVrCbCm95ia/3MUzYA5CN8z6tqWwchQHgDjmNcDEnvLroZNRosaG33wVsyHRieD6IpmKR3Fg==; xm-page-viewid=ximalaya-web; impl=www.ximalaya.com.login; 1&remember_me=y; 1&_token=42807439&78C48A10340N6EC54445916FEDE43F5C752EA7B9A3CC30AE4F1B8CF1375257474EB3F2EEDCF528M002AD0D10F3D7D0_; 1_l_flag=42807439&78C48A10340N6EC54445916FEDE43F5C752EA7B9A3CC30AE4F1B8CF1375257474EB3F2EEDCF528M002AD0D10F3D7D0__2025-03-0904:34:16; web_login=1741465991655",
+            "enabled": true
+          },
+          {
+            "name": "User-Agent",
+            "value": "Mozilla/4.0 (compatible; MSIE 8.0; Windows NT 6.1; Win64; x64; Trident/4.0; .NET CLR 2.0.50727; SLCC2; .NET CLR 3.5.30729; .NET CLR 3.0.30729; .NET4.0C; .NET4.0E; InfoPath.3)",
+            "enabled": true
+          },
+          {
+            "name": "Referer",
+            "value": "https://www.ximalaya.com",
+            "enabled": true
+          },
+          {
+            "name": "xm-sign",
+            "value": "D2JBl5r+xd5EzKY/KWY/KpPic8pJUFmVAvYroIo/t7gXIXa1&&N9g78wvpNLaguGMwtRAx9tOgDBjj5KqYkWUNWLxmgyg_1",
+            "enabled": true
+          }
+        ],
+        "params": [
+          {
+            "name": "device",
+            "value": "iPhone",
+            "type": "query",
+            "enabled": true
+          },
+          {
+            "name": "trackId",
+            "value": "452879769",
+            "type": "query",
+            "enabled": true
+          }
+        ],
+        "body": {
+          "mode": "none",
+          "formUrlEncoded": [],
+          "multipartForm": [],
+          "file": []
+        },
+        "script": {},
+        "vars": {},
+        "assertions": [],
+        "tests": "",
+        "docs": "",
+        "auth": {
+          "mode": "none"
+        }
+      }
+    }
+  ],
+  "environments": [],
+  "brunoConfig": {
+    "version": "1",
+    "name": "xmly",
+    "type": "collection",
+    "ignore": [
+      "node_modules",
+      ".git"
+    ],
+    "size": 0.0018205642700195312,
+    "filesCount": 1
+  }
+}
