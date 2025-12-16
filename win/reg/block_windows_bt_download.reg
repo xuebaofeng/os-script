@@ -1,0 +1,15 @@
+Windows Registry Editor Version 5.00
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\DeliveryOptimization\Config]
+"DODownloadMode"=dword:00000064
+
+; Prevent Feature Updates & Version Upgrades (that use $WINDOWS.~BT)
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate]
+"DeferFeatureUpdates"=dword:00000001
+"DeferFeatureUpdatesPeriodInDays"=dword:0000016d
+"TargetReleaseVersion"=dword:00000001
+"TargetReleaseVersionInfo"="22H2"
+
+[HKEY_LOCAL_MACHINE\SOFTWARE\Microsoft\Windows\CurrentVersion\WindowsUpdate\OSUpgrade]
+"AllowOSUpgrade"=dword:00000000

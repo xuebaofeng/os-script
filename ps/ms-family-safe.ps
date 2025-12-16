@@ -1,0 +1,8 @@
+Set-Service -Name WpcMonSvc -StartupType Automatic
+
+# 如果当前未运行，启动服务
+Start-Service -Name WpcMonSvc
+
+# 查看状态确认
+Get-CimInstance Win32_Service -Filter "Name='WpcMonSvc'" | Select-Object Name,StartMode,State
+
