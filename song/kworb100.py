@@ -7,6 +7,7 @@ urls = [
     "https://kworb.net/spotify/country/us_weekly.html",
     "https://kworb.net/spotify/country/us_weekly_totals.html",
     "https://kworb.net/radio",
+    "https://kworb.net/pop/cumulative.html"
 ]
 
 
@@ -35,6 +36,9 @@ all_songs = []
 for url in urls:
     file = os.path.join(url.split("/")[-1])
     filepath = os.path.join(cache_dir, file)
+
+    print(filepath)
+
     if not os.path.exists(filepath):
         print(f"File not found: {filepath}")
         continue
@@ -44,41 +48,38 @@ for url in urls:
 
     table = soup.find("table")
     if not table:
+        print(f"Table not found: {filepath}")
         continue
 
     rows = table.find_all("tr")[1:101]  # 前100条
     for row in rows:
-        tds = row.find_all("td")
-        if len(tds) >= 3:
-            third_td = tds[2]
+        a_tags = row.find_all('a')
+        if len(a_tags) == 2:  # 每个 tr 里只有两个 a
+            artist = a_tags[0].get_text(strip=True)
+            title = a_tags[1].get_text(strip=True)
+            song = f"{artist} - {title}"
 
-            # 优先 Spotify 风格 <a> 标签
-            a_tags = third_td.find_all("a")
-            if len(a_tags) >= 2:
-                artist = a_tags[0].get_text(strip=True)
-                title = a_tags[1].get_text(strip=True)
-                song = f"{artist} - {title}"
-
-            # 如果没有 <a> 标签，尝试 Radio 风格 <div>
+        # 如果没有 <a> 标签，尝试 Radio 风格 <div>
+        else:
+            div = row.find("div")
+            if div:
+                song = div.get_text(strip=True)
             else:
-                div = third_td.find("div")
-                if div:
-                    song = div.get_text(strip=True)
-                else:
-                    continue  # 没有找到歌曲信息，跳过
+                continue  # 没有找到歌曲信息，跳过
 
-            # 清理格式：去掉换行、多余空格
-            song = " ".join(song.split())
-            # 去掉括号及内容
-            song = re.sub(r'\s*\(.*?\)', '', song)
+        # 清理格式：去掉换行、多余空格
+        song = " ".join(song.split())
+        # 去掉括号及内容
+        song = re.sub(r'\s*\(.*?\)', '', song)
 
-            all_songs.append(song)
+        all_songs.append(song)
 
 
 # 去重
 unique_songs = list(dict.fromkeys(all_songs))
 
 
+print(f"{len(unique_songs)} unique_songs need to be downloaded.")
 
 music_dir = r"C:\shared\media\CloudMusic"
 existing_files = set(os.listdir(music_dir))  # 获取目录下所有文件名
@@ -96,7 +97,7 @@ for song in unique_songs:
     if song.lower() not in existing_files_no_ext:
         songs_to_download.append(song)
 
-print(f"{len(songs_to_download)} songs need to be downloaded.")
+print(f"After dedupe from local, {len(songs_to_download)} songs left to be downloaded.")
 
 
 
@@ -133,5 +134,3 @@ family_songs = sorted(set(family_songs))  # 去重并按字母顺序排序
 with open("spotify_us_top100_unique.txt", "w", encoding="utf-8") as f:
     for song in family_songs:
         f.write(f"{song}\n")
-
-print(f"Done! {len(family_songs)} unique songs saved.")
