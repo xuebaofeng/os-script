@@ -3,7 +3,7 @@ import socket
 import requests
 from datetime import datetime
 
-MIN_FREE_PERCENT = 90
+MIN_FREE_PERCENT = 10
 BARK_URL = "https://api.day.app/7xLt8jGJxwJXQy7H5fGG4m"
 
 hostname = socket.gethostname()
