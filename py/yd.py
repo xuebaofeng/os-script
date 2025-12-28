@@ -1,20 +1,26 @@
 import yt_dlp
-import sys
 
-video_url = "https://www.youtube.com/watch?v=GCdwKhTtNNw"
+
 save_path = 'c:/baidunetdiskdownload/'
-def download_best_audio_as_mp3(video_url, save_path=save_path):
-    ydl_opts = {
-        'outtmpl': save_path + '/%(title)s.%(ext)s',  # Save path and file name
-        'postprocessors': [{  # Post-process to convert to MP3
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',  # Convert to mp3
-            'preferredquality': '0',  # '0' means best quality, auto-determined by source
-        }],
-        'keepvideo' : False,
-        'format' : 'bestaudio'
-    }
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        ydl.download([video_url])
 
-download_best_audio_as_mp3(video_url, save_path)
+# 配置
+ydl_opts = {
+    'format': 'bestaudio[ext=webm]',  # 优先 Opus 音轨
+    'outtmpl': save_path +'/%(title)s.%(ext)s',  # 输出文件夹 + 文件名
+    'postprocessors': [{
+        'key': 'FFmpegExtractAudio',  # 提取音频
+        'preferredcodec': 'opus',      # 转成 Opus
+        'preferredquality': '0',       # VBR 最高质量
+    }],
+    'quiet': False,  # 显示下载进度
+    'noplaylist': False,  # 支持播放列表
+}
+
+# 视频 URL 列表，可直接放多个
+video_urls = [
+    'https://www.youtube.com/watch?v=C7wLiOdaAHk',
+]
+
+# 批量下载
+with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+    ydl.download(video_urls)
