@@ -3,13 +3,13 @@ import subprocess
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 # 音乐目录
-MUSIC_DIR = r"C:\shared\media\CloudMusic"
+MUSIC_DIR = r"C:\BaiduNetdiskDownload"
 
 # 支持的扩展名，只处理 opus 和 mp3
 SUPPORTED_EXT = ['.opus', '.mp3']
 
 # 最大线程数
-MAX_WORKERS = 16  # 根据 CPU 核心数调节
+MAX_WORKERS = 8  # 根据 CPU 核心数调节
 
 def process_file(file_path):
     """

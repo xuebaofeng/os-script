@@ -71,8 +71,14 @@ for url in urls:
         song = " ".join(song.split())
         # 去掉括号及内容
         song = re.sub(r'\s*\(.*?\)', '', song)
+        song = song.replace("â", "'")
 
         all_songs.append(song)
+
+file_path = "gpt-song.txt"
+# 读取文件内容到 Python 列表变量 all_songs
+with open(file_path, "r", encoding="utf-8") as f:
+    all_songs = [line.strip() for line in f if line.strip()]
 
 
 # 去重
