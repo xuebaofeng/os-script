@@ -23,7 +23,7 @@ for part in psutil.disk_partitions(all=False):
             f"{datetime.now().strftime('%Y-%m-%d %H:%M')} | {hostname} | {part.device} | 剩余 {free_gb:.1f} GB ({free_percent:.1f}%)")
 
 
-if alerts:
+if len(alerts) > 0:
     content = "\n".join(alerts)
     title = f"⚠ 硬盘报警 - {hostname}"
     payload = {
