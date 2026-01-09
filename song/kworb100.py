@@ -65,6 +65,7 @@ for url in urls:
             if div:
                 song = div.get_text(strip=True)
             else:
+                print("没有找到歌曲信息，跳过")
                 continue  # 没有找到歌曲信息，跳过
 
         # 清理格式：去掉换行、多余空格
@@ -74,12 +75,6 @@ for url in urls:
         song = song.replace("â", "'")
 
         all_songs.append(song)
-
-file_path = "gpt-song.txt"
-# 读取文件内容到 Python 列表变量 all_songs
-with open(file_path, "r", encoding="utf-8") as f:
-    all_songs = [line.strip() for line in f if line.strip()]
-
 
 # 去重
 unique_songs = list(dict.fromkeys(all_songs))
