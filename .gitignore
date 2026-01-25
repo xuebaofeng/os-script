@@ -1,6 +1,5 @@
 .idea
 .vscode
 song/__pycache__/*
-
 song/html_cache
 song/spotify_us_top100_unique.txt
