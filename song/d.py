@@ -33,9 +33,11 @@ for song in songs:
     # Output template: force the file to the exact name from songs.txt
     output_path = os.path.join(download_folder, f"{safe_name}.%(ext)s")
 
-    # Build yt-dlp command
+    # Build yt-dlp command with Node.js and android client
     cmd = [
         "yt-dlp",
+        "--js-runtimes", "node",
+        "--extractor-args", "youtube:player_client=android",
         "-x", "--audio-format", "opus", "--audio-quality", "0",
         "--no-overwrites",
         "--download-archive", archive_file,
