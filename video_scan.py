@@ -2,7 +2,7 @@ import os
 import subprocess
 
 # 文件夹路径
-folder = r"C:\shared\media\movie"
+folder = r"C:\shared\srfc2012"
 # 支持的视频扩展名
 video_exts = [".mp4", ".mkv", ".mov", ".avi"]
 
