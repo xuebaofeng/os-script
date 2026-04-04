@@ -8,9 +8,9 @@ from gtts import gTTS
 # ----------------------------
 words_file = "words.txt"
 output_folder = "spanish_audio"
-repeat_times = 1   # 每个单词播放次数
-repeat_gap = 1     # 每次播放间隔（秒）
-write_gap = 1     # 播放完写字间隔（秒）
+repeat_times = 3   # 每个单词播放次数
+repeat_gap = 3     # 每次播放间隔（秒）
+write_gap = 9     # 播放完写字间隔（秒）
 
 # ----------------------------
 # 读取单词列表
