@@ -8,9 +8,9 @@ from gtts import gTTS
 # ----------------------------
 words_file = "words.txt"
 output_folder = "spanish_audio"
-repeat_times = 3   # 每个单词播放次数
-repeat_gap = 3     # 每次播放间隔（秒）
-write_gap = 9     # 播放完写字间隔（秒）
+repeat_times = 2   # 每个单词播放次数
+repeat_gap = 2     # 每次播放间隔（秒）
+write_gap = 5      # 播放完写字间隔（秒）
 
 # ----------------------------
 # 读取单词列表
@@ -23,21 +23,12 @@ with open(words_file, "r", encoding="utf-8") as f:
             words.append(word)
 
 # ----------------------------
-# 生成 mp3（如果不存在）
+# 创建输出文件夹
 # ----------------------------
 os.makedirs(output_folder, exist_ok=True)
-for word in words:
-    filename = word.replace(" ", "_").replace("/", "-") + ".mp3"
-    filepath = os.path.join(output_folder, filename)
-    if not os.path.exists(filepath):
-        tts = gTTS(text=word, lang='es')
-        tts.save(filepath)
-        print(f"Saved: {filepath}")
-    else:
-        print(f"Skipped (exists): {filepath}")
 
 # ----------------------------
-# 播放音频
+# 播放音频（播放前生成）
 # ----------------------------
 learned_or_skipped = {}  # 可用于记录已学单词
 
@@ -49,8 +40,13 @@ for word in words:
     filename = word.replace(" ", "_").replace("/", "-") + ".mp3"
     filepath = os.path.join(output_folder, filename)
 
-    print(f"\nPlaying: {word}")
+    # 如果文件不存在，先生成
+    if not os.path.exists(filepath):
+        print(f"Generating audio for: {word}")
+        tts = gTTS(text=word, lang='es')
+        tts.save(filepath)
 
+    print(f"\nPlaying: {word}")
     for _ in range(repeat_times):
         subprocess.run(["ffplay", "-nodisp", "-autoexit", filepath])
         time.sleep(repeat_gap)

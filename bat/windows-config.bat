@@ -1,3 +1,6 @@
+@rem 注册表命令关闭 HVCI
+reg add "HKLM\SYSTEM\CurrentControlSet\Control\DeviceGuard\Scenarios\HypervisorEnforcedCodeIntegrity" /v Enabled /t REG_DWORD /d 0 /f
+
 sc stop "WSearch"
 sc config "WSearch" start= disabled
 
