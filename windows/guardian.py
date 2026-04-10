@@ -1,0 +1,275 @@
+import os
+import subprocess
+import time
+from datetime import datetime, timedelta
+import shutil
+import sys
+import psutil
+import glob
+from http.server import BaseHTTPRequestHandler, HTTPServer
+import urllib.parse
+import threading
+
+# ---------------- 配置 ----------------
+PRIVOXY_ACTIONS = r"C:\Program Files (x86)\Privoxy\user.action"
+PRIVOXY_BLOCK_LEARNING_START = "# GUARDIAN_BLOCK_LEARNING_START"
+PRIVOXY_BLOCK_LEARNING_END = "# GUARDIAN_BLOCK_LEARNING_END"
+PRIVOXY_BLOCK_ENTERTAINMENT_START = "# GUARDIAN_BLOCK_ENTERTAINMENT_START"
+PRIVOXY_BLOCK_ENTERTAINMENT_END = "# GUARDIAN_BLOCK_ENTERTAINMENT_END"
+
+DEFAULT_TIME = 30
+LOG_FILE = r"C:\scripts\guardian.log"
+DRYRUN = "--dryrun" in sys.argv
+
+# ---------------- Edge / Roblox ----------------
+EDGE_EXE = "msedge.exe"
+ROBLOX_EXE = "RobloxPlayerBeta.exe"
+
+# ---------------- 域名分类 ----------------
+PRIVOXY_DOMAINS_LEARNING = [
+    ".youtube.com",
+    ".googlevideo.com",
+    ".youtu.be",
+]
+
+PRIVOXY_DOMAINS_ENTERTAINMENT = [
+
+    ".roblox.com",
+    ".poki.com",
+    ".gg",
+    ".io",
+    ".game"
+]
+
+# ---------------- 工具 ----------------
+def log(msg):
+    t = datetime.now().strftime("%H:%M:%S")
+    line = f"[{t}] {msg}"
+    print(line)
+    with open(LOG_FILE, "a", encoding="utf-8") as f:
+        f.write(line + "\n")
+
+def run(cmd):
+    if DRYRUN:
+        log(f"[DRYRUN] {cmd}")
+    else:
+        subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+def firewall_exists(name):
+    r = subprocess.run(f'netsh advfirewall firewall show rule name="{name}"', shell=True, capture_output=True, text=True)
+    return "No rules match" not in r.stdout
+
+# ---------------- 防火墙 ----------------
+def firewall_on():
+    run("netsh advfirewall set allprofiles state on")
+    log("🔴 防火墙开启")
+
+def firewall_off():
+    run("netsh advfirewall set allprofiles state off")
+    log("🟢 防火墙关闭")
+
+# ---------------- Privoxy ----------------
+def modify_privoxy(unblock=False, unblock_learning=False, unblock_entertainment=False):
+    if not os.path.exists(PRIVOXY_ACTIONS):
+        log(f"❌ Privoxy 配置文件不存在: {PRIVOXY_ACTIONS}")
+        return
+
+    if not DRYRUN:
+        shutil.copy2(PRIVOXY_ACTIONS, PRIVOXY_ACTIONS + ".bak")
+
+    with open(PRIVOXY_ACTIONS, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    new_lines = []
+    in_learning = False
+    in_entertainment = False
+    for line in lines:
+        s = line.strip()
+        if s == PRIVOXY_BLOCK_LEARNING_START:
+            in_learning = True
+            continue
+        if s == PRIVOXY_BLOCK_LEARNING_END:
+            in_learning = False
+            continue
+        if s == PRIVOXY_BLOCK_ENTERTAINMENT_START:
+            in_entertainment = True
+            continue
+        if s == PRIVOXY_BLOCK_ENTERTAINMENT_END:
+            in_entertainment = False
+            continue
+        if not in_learning and not in_entertainment:
+            new_lines.append(line)
+
+    # 娱乐域名
+    if not unblock or (unblock and not unblock_entertainment):
+        new_lines.append(PRIVOXY_BLOCK_ENTERTAINMENT_START + "\n")
+        new_lines.append("{+block}\n")
+        for d in PRIVOXY_DOMAINS_ENTERTAINMENT:
+            new_lines.append(d + "\n")
+        new_lines.append(PRIVOXY_BLOCK_ENTERTAINMENT_END + "\n")
+        log("🔴 Privoxy 封锁娱乐域名")
+    else:
+        log("🟢 Privoxy 解封娱乐域名")
+
+    # 学习域名
+    if not unblock or (unblock and not unblock_learning):
+        new_lines.append(PRIVOXY_BLOCK_LEARNING_START + "\n")
+        new_lines.append("{+block}\n")
+        for d in PRIVOXY_DOMAINS_LEARNING:
+            new_lines.append(d + "\n")
+        new_lines.append(PRIVOXY_BLOCK_LEARNING_END + "\n")
+        log("🔴 Privoxy 封锁学习域名")
+    else:
+        log("🟢 Privoxy 解封学习域名")
+
+    with open(PRIVOXY_ACTIONS, "w", encoding="utf-8") as f:
+        f.writelines(new_lines)
+    log("✅ Privoxy 配置已更新")
+
+# ---------------- 查找 Roblox ----------------
+def find_roblox():
+    paths = []
+    base = r"C:\Users"
+    for user in os.listdir(base):
+        user_path = os.path.join(base, user)
+        if not os.path.isdir(user_path):
+            continue
+        roblox_dir = os.path.join(user_path, r"AppData\Local\Roblox\Versions")
+        if not os.path.exists(roblox_dir):
+            continue
+        for ver in os.listdir(roblox_dir):
+            exe_path = os.path.join(roblox_dir, ver, ROBLOX_EXE)
+            if os.path.exists(exe_path):
+                paths.append(exe_path)
+    return paths
+
+# ---------------- 封锁 ----------------
+def find_program_path(exe):
+    search_dirs = [r"C:\Program Files", r"C:\Program Files (x86)"]
+    for base in search_dirs:
+        matches = glob.glob(os.path.join(base, "**", exe), recursive=True)
+        if matches:
+            return matches[0]
+    return None
+
+def block_edge():
+    rule_tcp = "Block Edge TCP Direct"
+    rule_udp = "Block Edge UDP Direct"
+    path = find_program_path(EDGE_EXE)
+    if not path:
+        log(f"❌ 未找到 {EDGE_EXE}")
+        return
+    if not firewall_exists(rule_tcp):
+        run(f'netsh advfirewall firewall add rule name="{rule_tcp}" dir=out action=block program="{path}" protocol=TCP')
+    if not firewall_exists(rule_udp):
+        run(f'netsh advfirewall firewall add rule name="{rule_udp}" dir=out action=block program="{path}" protocol=UDP')
+    log("🔒 Edge 封锁直连，只能走 Privoxy")
+
+def block_roblox(unblock=False):
+    paths = find_roblox()
+    rule = "Block Roblox All"
+    if not paths:
+        log(f"❌ 未找到 {ROBLOX_EXE}")
+        return
+    if unblock:
+        if firewall_exists(rule):
+            run(f'netsh advfirewall firewall delete rule name="{rule}"')
+        log("🟢 Roblox 已解封")
+    else:
+        if not firewall_exists(rule):
+            for p in paths:
+                run(f'netsh advfirewall firewall add rule name="{rule}" dir=out action=block program="{p}" protocol=ANY')
+        log("❌ Roblox 封锁（所有网络）")
+
+# ---------------- 统一封锁/解封 ----------------
+def apply_block(unblock=False, unblock_type=None):
+    firewall_on()
+    block_edge()
+    if unblock_type == "all":
+        block_roblox(unblock=True)
+        modify_privoxy(unblock=True, unblock_learning=True, unblock_entertainment=True)
+    elif unblock_type == "learning":
+        block_roblox(unblock=False)
+        modify_privoxy(unblock=True, unblock_learning=True, unblock_entertainment=False)
+    else:
+        block_roblox(unblock=False)
+        modify_privoxy(unblock=False)
+
+# ---------------- Web ----------------
+unblock_end_time = None
+unblock_type = None
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        global unblock_end_time, unblock_type
+        parsed = urllib.parse.urlparse(self.path)
+        if parsed.path == "/":
+            html_content = '''
+            <html>
+                <head><meta charset="utf-8"><title>Guardian Control</title></head>
+                <body>
+                    <h1>Guardian Web Control</h1>
+                    <form method="get" action="/unblock">
+                        <label>解封类型:</label>
+                        <select name="type">
+                            <option value="learning">学习域名</option>
+                            <option value="all">全部</option>
+                        </select>
+                        <label>分钟数:</label>
+                        <input type="number" name="time" value="30" min="1" max="180">
+                        <button type="submit">解封</button>
+                    </form>
+                    <p>查看 <a href="/status">状态</a></p>
+                </body>
+            </html>
+            '''
+            self.send_response(200)
+            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(html_content.encode("utf-8"))
+        elif parsed.path == "/unblock":
+            q = urllib.parse.parse_qs(parsed.query)
+            t = q.get("type", ["learning"])[0]
+            m = int(q.get("time", [30])[0])
+            unblock_end_time = datetime.now() + timedelta(minutes=m)
+            unblock_type = t
+            apply_block(unblock=True, unblock_type=t)
+            self.send_response(200)
+            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write(f"✅ 已解封 {t} {m} 分钟".encode("utf-8"))
+        elif parsed.path == "/status":
+            self.send_response(200)
+            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.end_headers()
+            now = datetime.now()
+            if unblock_end_time:
+                remaining = max(0,int((unblock_end_time - now).total_seconds() / 60))
+                self.wfile.write(f"剩余解封时间: {remaining} 分钟, 类型: {unblock_type}".encode("utf-8"))
+            else:
+                self.wfile.write("当前全封锁状态".encode("utf-8"))
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+def run_web():
+    server = HTTPServer(("0.0.0.0", 8090), Handler)
+    log("🌐 Web control running on port 8090")
+    server.serve_forever()
+
+# ---------------- 主循环 ----------------
+def loop():
+    global unblock_end_time, unblock_type
+    apply_block(unblock=False)
+    threading.Thread(target=run_web, daemon=True).start()
+    while True:
+        now = datetime.now()
+        if unblock_end_time and now >= unblock_end_time:
+            unblock_end_time = None
+            unblock_type = None
+            apply_block(unblock=False)
+            log("🔴 恢复全封锁状态")
+        time.sleep(60)
+
+# ---------------- 启动 ----------------
+if __name__ == "__main__":
+    loop()
