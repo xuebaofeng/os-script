@@ -195,6 +195,14 @@ def apply_block(unblock=False, unblock_type=None):
         block_roblox(unblock=False)
         modify_privoxy(unblock=False)
 
+def immediate_lockdown():
+    """立即封锁所有访问"""
+    global unblock_end_time, unblock_type
+    unblock_end_time = None
+    unblock_type = None
+    apply_block(unblock=False)
+    log("🚨 立即封锁所有访问")
+
 # ---------------- Web ----------------
 unblock_end_time = None
 unblock_type = None
@@ -218,6 +226,10 @@ class Handler(BaseHTTPRequestHandler):
                         <input type="number" name="time" value="30" min="1" max="180">
                         <button type="submit">解封</button>
                     </form>
+                    <br>
+                    <form method="get" action="/lockdown">
+                        <button type="submit" style="background-color: red; color: white; padding: 10px 20px; border: none; border-radius: 5px;">🚨 立即封锁</button>
+                    </form>
                     <p>查看 <a href="/status">状态</a></p>
                 </body>
             </html>
@@ -237,6 +249,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-type", "text/html; charset=utf-8")
             self.end_headers()
             self.wfile.write(f"✅ 已解封 {t} {m} 分钟".encode("utf-8"))
+        elif parsed.path == "/lockdown":
+            immediate_lockdown()
+            self.send_response(200)
+            self.send_header("Content-type", "text/html; charset=utf-8")
+            self.end_headers()
+            self.wfile.write("🚨 已立即封锁所有访问".encode("utf-8"))
         elif parsed.path == "/status":
             self.send_response(200)
             self.send_header("Content-type", "text/html; charset=utf-8")
