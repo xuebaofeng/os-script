@@ -132,6 +132,6 @@ family_songs = sorted(set(family_songs))  # 去重并按字母顺序排序
 
 
 # 保存 TXT
-with open("spotify_us_top100_unique.txt", "w", encoding="utf-8") as f:
+with open("tbd.txt", "w", encoding="utf-8") as f:
     for song in family_songs:
         f.write(f"{song}\n")

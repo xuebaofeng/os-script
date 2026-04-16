@@ -165,6 +165,52 @@ def block_edge():
         run(f'netsh advfirewall firewall add rule name="{rule_udp}" dir=out action=block program="{path}" protocol=UDP')
     log("🔒 Edge 封锁直连，只能走 Privoxy")
 
+
+# ---------------- Process Management ----------------
+def kill_roblox_processes():
+    """Kill all Roblox-related processes"""
+    killed_count = 0
+    roblox_processes = []
+
+    # Common Roblox process names
+    roblox_names = [
+        "RobloxPlayerBeta.exe",
+        "RobloxPlayerLauncher.exe",
+        "RobloxStudioBeta.exe",
+        "RobloxStudioLauncher.exe",
+        "RobloxCrashHandler.exe"
+    ]
+
+    for proc in psutil.process_iter(['pid', 'name']):
+        try:
+            process_name = proc.info['name']
+            if process_name in roblox_names:
+                roblox_processes.append(proc)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            continue
+
+    # Kill found Roblox processes
+    for proc in roblox_processes:
+        try:
+            proc.terminate()
+            killed_count += 1
+            log(f" Killed Roblox process: {proc.info['name']} (PID: {proc.pid})")
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            try:
+                proc.kill()
+                killed_count += 1
+                log(f" Force killed Roblox process: {proc.info['name']} (PID: {proc.pid})")
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                log(f" Failed to kill Roblox process: {proc.info['name']} (PID: {proc.pid})")
+
+    if killed_count == 0:
+        log(" No Roblox processes found running")
+    else:
+        log(f" Killed {killed_count} Roblox process(es)")
+
+    return killed_count
+
+
 def block_roblox(unblock=False):
     paths = find_roblox()
     rule = "Block Roblox All"
@@ -179,6 +225,7 @@ def block_roblox(unblock=False):
         if not firewall_exists(rule):
             for p in paths:
                 run(f'netsh advfirewall firewall add rule name="{rule}" dir=out action=block program="{p}" protocol=ANY')
+        kill_roblox_processes()
         log("❌ Roblox 封锁（所有网络）")
 
 # ---------------- 统一封锁/解封 ----------------

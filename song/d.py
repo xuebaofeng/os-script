@@ -2,7 +2,7 @@ import os
 import subprocess
 
 # Paths
-songs_file = r"spotify_us_top100_unique.txt"  # your songs list
+songs_file = r"tbd.txt"  # your songs list
 download_folder = r"C:\BaiduNetdiskDownload"
 archive_file = os.path.join(download_folder, "downloaded.txt")
 
