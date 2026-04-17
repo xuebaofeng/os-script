@@ -18,7 +18,7 @@ PRIVOXY_BLOCK_ENTERTAINMENT_START = "# GUARDIAN_BLOCK_ENTERTAINMENT_START"
 PRIVOXY_BLOCK_ENTERTAINMENT_END = "# GUARDIAN_BLOCK_ENTERTAINMENT_END"
 
 DEFAULT_TIME = 30
-LOG_FILE = r"C:\scripts\guardian.log"
+LOG_FILE = r"guardian.log"
 DRYRUN = "--dryrun" in sys.argv
 
 # ---------------- Edge / Roblox ----------------
@@ -53,10 +53,19 @@ def run(cmd):
     if DRYRUN:
         log(f"[DRYRUN] {cmd}")
     else:
-        subprocess.run(cmd, shell=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        subprocess.run(cmd, 
+                       shell=True,
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL,
+                       text=True,
+                       encoding="utf-8",
+                       errors="ignore")
 
 def firewall_exists(name):
-    r = subprocess.run(f'netsh advfirewall firewall show rule name="{name}"', shell=True, capture_output=True, text=True)
+    r = subprocess.run(f'netsh advfirewall firewall show rule name="{name}"', shell=True, capture_output=True,
+                       text=True,
+                       encoding="utf-8",
+                       errors="ignore")
     return "No rules match" not in r.stdout
 
 # ---------------- 防火墙 ----------------
