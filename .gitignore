@@ -4,3 +4,4 @@ song/__pycache__/*
 song/html_cache
 song/tbd.txt
 **/*.mp3
+/song/cache/*
