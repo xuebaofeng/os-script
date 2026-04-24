@@ -1,5 +1,1 @@
-﻿$path = "D:\shared"
-
-Get-ChildItem -Path $path -Recurse -Force |
-        Where-Object { $_.Name -like "*sync-conflict*" } |
-        Remove-Item -Force -Recurse
+﻿Get-ChildItem -Path C:\shared -Recurse -Filter "*sync-conflict-*" -File | Remove-Item -Force

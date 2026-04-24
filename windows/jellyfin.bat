@@ -2,7 +2,7 @@
 chcp 65001 >nul
 setlocal enabledelayedexpansion
 
-set EXE="C:\Program Files\Jellyfin\Server\jellyfin.exe"
+set EXE="C:\green\jellyfin\jellyfin.exe"
 
 echo 启动 Jellyfin...
 start "" %EXE%
