@@ -5,7 +5,6 @@ from datetime import datetime, timedelta
 import shutil
 import sys
 import psutil
-import glob
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import urllib.parse
 import threading
@@ -18,7 +17,7 @@ PRIVOXY_BLOCK_ENTERTAINMENT_START = "# GUARDIAN_BLOCK_ENTERTAINMENT_START"
 PRIVOXY_BLOCK_ENTERTAINMENT_END = "# GUARDIAN_BLOCK_ENTERTAINMENT_END"
 
 DEFAULT_TIME = 30
-LOG_FILE = r"guardian.log"
+LOG_FILE = r"C:\scripts\guardian.log"
 DRYRUN = "--dryrun" in sys.argv
 
 # ---------------- Edge / Roblox ----------------
@@ -38,8 +37,10 @@ PRIVOXY_DOMAINS_ENTERTAINMENT = [
     ".poki.com",
     ".gg",
     ".io",
-    ".game"
+    ".game",
+    ".elftoon.com"
 ]
+
 
 # ---------------- 工具 ----------------
 def log(msg):
@@ -49,33 +50,35 @@ def log(msg):
     with open(LOG_FILE, "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
+
 def run(cmd):
-    if DRYRUN:
-        log(f"[DRYRUN] {cmd}")
-    else:
-        subprocess.run(cmd, 
-                       shell=True,
-                       stdout=subprocess.DEVNULL,
-                       stderr=subprocess.DEVNULL,
-                       text=True,
-                       encoding="utf-8",
-                       errors="ignore")
+    print(">>>", cmd)
+    r = subprocess.run(cmd, shell=True, capture_output=True, text=True)
+    print("OUT:", r.stdout)
+    print("ERR:", r.stderr)
+
 
 def firewall_exists(name):
-    r = subprocess.run(f'netsh advfirewall firewall show rule name="{name}"', shell=True, capture_output=True,
-                       text=True,
-                       encoding="utf-8",
-                       errors="ignore")
-    return "No rules match" not in r.stdout
+    r = subprocess.run(
+        f'netsh advfirewall firewall show rule name="{name}"',
+        shell=True,
+        capture_output=True,
+        text=True
+    )
+    out = r.stdout
+    return not ("No rules match" in out or "没有与指定条件匹配的规则" in out)
+
 
 # ---------------- 防火墙 ----------------
 def firewall_on():
     run("netsh advfirewall set allprofiles state on")
     log("🔴 防火墙开启")
 
+
 def firewall_off():
     run("netsh advfirewall set allprofiles state off")
     log("🟢 防火墙关闭")
+
 
 # ---------------- Privoxy ----------------
 def modify_privoxy(unblock=False, unblock_learning=False, unblock_entertainment=False):
@@ -135,6 +138,7 @@ def modify_privoxy(unblock=False, unblock_learning=False, unblock_entertainment=
         f.writelines(new_lines)
     log("✅ Privoxy 配置已更新")
 
+
 # ---------------- 查找 Roblox ----------------
 def find_roblox():
     paths = []
@@ -152,27 +156,34 @@ def find_roblox():
                 paths.append(exe_path)
     return paths
 
+
 # ---------------- 封锁 ----------------
-def find_program_path(exe):
-    search_dirs = [r"C:\Program Files", r"C:\Program Files (x86)"]
-    for base in search_dirs:
-        matches = glob.glob(os.path.join(base, "**", exe), recursive=True)
-        if matches:
-            return matches[0]
+
+def find_edge():
+    candidates = [
+        r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+        r"C:\Program Files\Microsoft\Edge\Application\msedge.exe"
+    ]
+    for p in candidates:
+        if os.path.exists(p):
+            return p
     return None
 
+
 def block_edge():
-    rule_tcp = "Block Edge TCP Direct"
-    rule_udp = "Block Edge UDP Direct"
-    path = find_program_path(EDGE_EXE)
+    path = find_edge()
     if not path:
-        log(f"❌ 未找到 {EDGE_EXE}")
+        log("❌ 未找到 Edge")
         return
-    if not firewall_exists(rule_tcp):
-        run(f'netsh advfirewall firewall add rule name="{rule_tcp}" dir=out action=block program="{path}" protocol=TCP')
-    if not firewall_exists(rule_udp):
-        run(f'netsh advfirewall firewall add rule name="{rule_udp}" dir=out action=block program="{path}" protocol=UDP')
-    log("🔒 Edge 封锁直连，只能走 Privoxy")
+
+    run('netsh advfirewall firewall delete rule name="Allow Edge Privoxy"')
+    run('netsh advfirewall firewall delete rule name="Block Edge All"')
+
+    run(f'netsh advfirewall firewall add rule name="Allow Edge Privoxy" dir=out action=allow program="{path}" protocol=TCP remoteip=127.0.0.1 remoteport=8118')
+
+    run(f'netsh advfirewall firewall add rule name="Block Edge All" dir=out action=block program="{path}" protocol=ANY')
+
+    log("🔒 Edge 只允许走 Privoxy")
 
 
 # ---------------- Process Management ----------------
@@ -237,6 +248,7 @@ def block_roblox(unblock=False):
         kill_roblox_processes()
         log("❌ Roblox 封锁（所有网络）")
 
+
 # ---------------- 统一封锁/解封 ----------------
 def apply_block(unblock=False, unblock_type=None):
     firewall_on()
@@ -251,6 +263,7 @@ def apply_block(unblock=False, unblock_type=None):
         block_roblox(unblock=False)
         modify_privoxy(unblock=False)
 
+
 def immediate_lockdown():
     """立即封锁所有访问"""
     global unblock_end_time, unblock_type
@@ -259,9 +272,12 @@ def immediate_lockdown():
     apply_block(unblock=False)
     log("🚨 立即封锁所有访问")
 
+
 # ---------------- Web ----------------
 unblock_end_time = None
 unblock_type = None
+
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         global unblock_end_time, unblock_type
@@ -317,7 +333,7 @@ class Handler(BaseHTTPRequestHandler):
             self.end_headers()
             now = datetime.now()
             if unblock_end_time:
-                remaining = max(0,int((unblock_end_time - now).total_seconds() / 60))
+                remaining = max(0, int((unblock_end_time - now).total_seconds() / 60))
                 self.wfile.write(f"剩余解封时间: {remaining} 分钟, 类型: {unblock_type}".encode("utf-8"))
             else:
                 self.wfile.write("当前全封锁状态".encode("utf-8"))
@@ -325,10 +341,12 @@ class Handler(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+
 def run_web():
-    server = HTTPServer(("0.0.0.0", 8090), Handler)
-    log("🌐 Web control running on port 8090")
+    server = HTTPServer(("0.0.0.0", 33005), Handler)
+    ##//log("🌐 Web control running on port 8090")
     server.serve_forever()
+
 
 # ---------------- 主循环 ----------------
 def loop():
@@ -344,6 +362,11 @@ def loop():
             log("🔴 恢复全封锁状态")
         time.sleep(60)
 
+
 # ---------------- 启动 ----------------
 if __name__ == "__main__":
-    loop()
+    try:
+        loop()
+    except Exception as e:
+        print("FATAL ERROR:", e)
+        input("Press Enter to exit...")
