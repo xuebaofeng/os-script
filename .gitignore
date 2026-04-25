@@ -1,7 +1,7 @@
 .idea
 .vscode
 song/__pycache__/*
-song/html_cache
+song/cache
 song/tbd.txt
 **/*.mp3
 /song/cache/*

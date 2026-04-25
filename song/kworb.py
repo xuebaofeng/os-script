@@ -11,7 +11,7 @@ urls = [
 ]
 
 
-cache_dir = "html_cache"
+cache_dir = "cache"
 os.makedirs(cache_dir, exist_ok=True)
 
 for url in urls:

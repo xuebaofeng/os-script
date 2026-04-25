@@ -2,3 +2,4 @@ playsound==1.2.2
 pydub
 fpdf2==2.6.1
 pillow
+langdetect
