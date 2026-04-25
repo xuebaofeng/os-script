@@ -3,13 +3,16 @@ import subprocess
 import time
 from datetime import datetime, timedelta
 import shutil
-import sys
 import psutil
 from http.server import BaseHTTPRequestHandler, HTTPServer
 import urllib.parse
 import threading
 
 # ---------------- 配置 ----------------
+
+WEB_PASSWORD = "shuangjiaoE#3"
+
+
 PRIVOXY_ACTIONS = r"C:\Program Files (x86)\Privoxy\user.action"
 PRIVOXY_BLOCK_LEARNING_START = "# GUARDIAN_BLOCK_LEARNING_START"
 PRIVOXY_BLOCK_LEARNING_END = "# GUARDIAN_BLOCK_LEARNING_END"
@@ -17,8 +20,7 @@ PRIVOXY_BLOCK_ENTERTAINMENT_START = "# GUARDIAN_BLOCK_ENTERTAINMENT_START"
 PRIVOXY_BLOCK_ENTERTAINMENT_END = "# GUARDIAN_BLOCK_ENTERTAINMENT_END"
 
 DEFAULT_TIME = 30
-LOG_FILE = r"C:\scripts\guardian.log"
-DRYRUN = "--dryrun" in sys.argv
+LOG_FILE = r"guardian.log"
 
 # ---------------- Edge / Roblox ----------------
 EDGE_EXE = "msedge.exe"
@@ -43,6 +45,9 @@ PRIVOXY_DOMAINS_ENTERTAINMENT = [
 
 
 # ---------------- 工具 ----------------
+def check_password(q):
+    return q.get("pwd", [""])[0] == WEB_PASSWORD
+
 def log(msg):
     t = datetime.now().strftime("%H:%M:%S")
     line = f"[{t}] {msg}"
@@ -86,8 +91,7 @@ def modify_privoxy(unblock=False, unblock_learning=False, unblock_entertainment=
         log(f"❌ Privoxy 配置文件不存在: {PRIVOXY_ACTIONS}")
         return
 
-    if not DRYRUN:
-        shutil.copy2(PRIVOXY_ACTIONS, PRIVOXY_ACTIONS + ".bak")
+    shutil.copy2(PRIVOXY_ACTIONS, PRIVOXY_ACTIONS + ".bak")
 
     with open(PRIVOXY_ACTIONS, "r", encoding="utf-8") as f:
         lines = f.readlines()
@@ -278,6 +282,7 @@ unblock_end_time = None
 unblock_type = None
 
 
+
 class Handler(BaseHTTPRequestHandler):
     def do_GET(self):
         global unblock_end_time, unblock_type
@@ -312,6 +317,12 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(html_content.encode("utf-8"))
         elif parsed.path == "/unblock":
             q = urllib.parse.parse_qs(parsed.query)
+            if not check_password(q):
+                self.send_response(403)
+                self.end_headers()
+                self.send_header("Content-type", "text/html; charset=utf-8")
+                self.wfile.write("❌ 密码错误".encode())
+                return
             t = q.get("type", ["learning"])[0]
             m = int(q.get("time", [30])[0])
             unblock_end_time = datetime.now() + timedelta(minutes=m)
@@ -343,8 +354,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def run_web():
-    server = HTTPServer(("0.0.0.0", 33005), Handler)
-    ##//log("🌐 Web control running on port 8090")
+    server = HTTPServer(("0.0.0.0", 8090), Handler)
+    log("🌐 Web control running on port 8090")
     server.serve_forever()
 
 
@@ -361,6 +372,7 @@ def loop():
             apply_block(unblock=False)
             log("🔴 恢复全封锁状态")
         time.sleep(60)
+
 
 
 # ---------------- 启动 ----------------
