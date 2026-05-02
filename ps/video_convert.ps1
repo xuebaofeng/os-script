@@ -1,12 +1,15 @@
+# ===== 可配置参数 =====
+$targetHeight = 720      # 想改成 1080 / 720 / 480 都可以
+$targetFps = $null       # 设成 30 就强制30fps；设成 $null 就保持原帧率
 
 Get-ChildItem -File | Where-Object { $_.Extension.ToLower() -in ".mp4",".mov" } | ForEach-Object {
     $in = $_.FullName
 
     # 输出文件名逻辑
-    if ($_.BaseName -match "_1080p$") {
-        $out = $in  # 已经是 1080p 文件
+    if ($_.BaseName -match "_${targetHeight}p$") {
+        $out = $in
     } else {
-        $out = "$($_.DirectoryName)\$($_.BaseName)_1080p.mp4"
+        $out = "$($_.DirectoryName)\$($_.BaseName)_${targetHeight}p.mp4"
     }
 
     $skip = $false
@@ -21,8 +24,8 @@ Get-ChildItem -File | Where-Object { $_.Extension.ToLower() -in ".mp4",".mov" } 
                 $width = [int]$parts[1]
                 $height = [int]$parts[2]
 
-                if ($codec -eq "hevc" -and $width -eq 1920 -and $height -eq 1080) {
-                    Write-Host "Skip (already HEVC 1080p): $($_.Name)"
+                if ($codec -eq "hevc" -and $height -eq $targetHeight) {
+                    Write-Host "Skip (already HEVC ${targetHeight}p): $($_.Name)"
                     $skip = $true
                 }
             }
@@ -33,6 +36,19 @@ Get-ChildItem -File | Where-Object { $_.Extension.ToLower() -in ".mp4",".mov" } 
 
     if (-not $skip) {
         Write-Host "Processing: $($_.Name)"
-        ffmpeg -y -i "$in" -vf scale=1920:-2 -r 30 -c:v libx265 -preset slow -crf 24 -c:a copy "$out"
+
+        $vf = "scale=-2:$targetHeight"
+
+        $fpsArg = @()
+        if ($targetFps) {
+            $fpsArg = @("-r", "$targetFps")
+        }
+
+        ffmpeg -y -i "$in" `
+            -vf $vf `
+            @fpsArg `
+            -c:v libx265 -preset slow -crf 28 `
+            -c:a copy `
+            "$out"
     }
 }
