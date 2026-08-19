@@ -1,54 +1,224 @@
-# ===== 可配置参数 =====
-$targetHeight = 720      # 想改成 1080 / 720 / 480 都可以
-$targetFps = $null       # 设成 30 就强制30fps；设成 $null 就保持原帧率
+chcp 65001 | Out-Null
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding = [System.Text.Encoding]::UTF8
+# =========================
+# 配置
+# =========================
 
-Get-ChildItem -File | Where-Object { $_.Extension.ToLower() -in ".mp4",".mov" } | ForEach-Object {
-    $in = $_.FullName
+$targetHeight = 720
+$targetFps = $null
 
-    # 输出文件名逻辑
-    if ($_.BaseName -match "_${targetHeight}p$") {
-        $out = $in
-    } else {
-        $out = "$($_.DirectoryName)\$($_.BaseName)_${targetHeight}p.mp4"
+# 可选:
+# "amf"  = AMD硬件编码（快）
+# "x265" = CPU软件编码（高质量）
+$encoderMode = "amf"
+
+# ===== AMF =====
+$amfPreset = "quality"
+$amfQp = 23
+
+# ===== x265 =====
+$x265Preset = "medium"
+$x265Crf = 24
+
+# 是否覆盖输出
+$overwrite = $true
+
+# 支持的视频扩展名
+$videoExts = @(".mp4", ".mov", ".mkv")
+
+$sourceFolder = "C:\shared\lexi-rage"
+
+# =========================
+# ffprobe函数
+# =========================
+
+function Get-VideoInfo {
+    param (
+        [string]$path
+    )
+
+    try {
+
+        $result = ffprobe `
+            -v error `
+            -select_streams v:0 `
+            -show_entries stream=codec_name,width,height `
+            -of csv=p=0 `
+            "$path"
+
+        $parts = $result -split ","
+
+        if ($parts.Length -ge 3) {
+
+            return @{
+                codec = $parts[0].Trim().ToLower()
+                width  = [int]$parts[1]
+                height = [int]$parts[2]
+            }
+        }
     }
+    catch {
+
+        Write-Host "FFprobe failed: $path"
+    }
+
+    return $null
+}
+
+# =========================
+# 主程序
+# =========================
+
+Get-ChildItem -Path $sourceFolder -File | Where-Object {
+    $videoExts -contains $_.Extension.ToLower()
+} | ForEach-Object {
+
+    $inputFile = $_.FullName
+
+    # 输出文件后缀
+    $suffix = "_${targetHeight}p"
+
+    if ($encoderMode -eq "amf") {
+        $suffix += "_amf"
+    }
+    else {
+        $suffix += "_x265"
+    }
+
+    $outputFile = Join-Path -Path $_.DirectoryName -ChildPath "$($_.BaseName)$suffix.mp4"
+
+    # =========================
+    # 跳过检查
+    # =========================
 
     $skip = $false
 
-    if (Test-Path $out) {
-        try {
-            $vinfo = ffprobe -v error -select_streams v:0 -show_entries stream=codec_name,width,height -of csv=p=0 "$out"
-            $parts = $vinfo -split ","
+    if (Test-Path $outputFile) {
 
-            if ($parts.Length -ge 3) {
-                $codec = $parts[0].Trim().ToLower()
-                $width = [int]$parts[1]
-                $height = [int]$parts[2]
+        $info = Get-VideoInfo $outputFile
 
-                if ($codec -eq "hevc" -and $height -eq $targetHeight) {
-                    Write-Host "Skip (already HEVC ${targetHeight}p): $($_.Name)"
-                    $skip = $true
-                }
+        if ($info) {
+
+            if (
+            $info.codec -eq "hevc" `
+                -and $info.height -eq $targetHeight
+            ) {
+
+                Write-Host "Skip: $($_.Name)"
+                $skip = $true
             }
-        } catch {
-            Write-Host "FFprobe failed for $($_.Name), skipping check."
         }
     }
 
-    if (-not $skip) {
-        Write-Host "Processing: $($_.Name)"
+    if ($skip) {
+        return
+    }
 
-        $vf = "scale=-2:$targetHeight"
+    # =========================
+    # 构建ffmpeg参数
+    # =========================
 
-        $fpsArg = @()
-        if ($targetFps) {
-            $fpsArg = @("-r", "$targetFps")
-        }
+    Write-Host ""
+    Write-Host "=================================================="
+    Write-Host "Processing: $($_.Name)"
+    Write-Host "Mode: $encoderMode"
 
-        ffmpeg -y -i "$in" `
-            -vf $vf `
-            @fpsArg `
-            -c:v libx265 -preset slow -crf 28 `
-            -c:a copy `
-            "$out"
+    $vf = "scale=-2:$targetHeight"
+
+    $args = @()
+
+    $args += "-hide_banner"
+    $args += "-nostdin"
+
+    if ($overwrite) {
+        $args += "-y"
+    }
+
+    $args += "-i"
+    $args += $inputFile
+
+    $args += "-vf"
+    $args += $vf
+
+    # FPS
+    if ($targetFps) {
+
+        $args += "-r"
+        $args += "$targetFps"
+    }
+
+    # =========================
+    # AMD AMF
+    # =========================
+
+    if ($encoderMode -eq "amf") {
+
+        $args += "-c:v"
+        $args += "hevc_amf"
+
+        $args += "-preset"
+        $args += $amfPreset
+
+        $args += "-rc"
+        $args += "cqp"
+
+        $args += "-qp_i"
+        $args += "$amfQp"
+
+        $args += "-qp_p"
+        $args += "$amfQp"
+    }
+
+    # =========================
+    # x265
+    # =========================
+
+    elseif ($encoderMode -eq "x265") {
+
+        $args += "-c:v"
+        $args += "libx265"
+
+        $args += "-preset"
+        $args += $x265Preset
+
+        $args += "-crf"
+        $args += "$x265Crf"
+    }
+
+    else {
+
+        Write-Host "错误: encoderMode必须是 amf 或 x265"
+        return
+    }
+
+    # 音频复制
+    $args += "-c:a"
+    $args += "copy"
+
+    $args += $outputFile
+
+    # =========================
+    # 执行
+    # =========================
+
+    Write-Host ""
+    Write-Host "ffmpeg $($args -join ' ')"
+    Write-Host ""
+
+    & ffmpeg @args
+
+    if ($LASTEXITCODE -eq 0) {
+
+        Write-Host ""
+        Write-Host "Done: $(Split-Path $outputFile -Leaf)"
+    }
+    else {
+
+        Write-Host ""
+        Write-Host "FAILED: $($_.Name)"
     }
 }
+
+Write-Host ""
+Write-Host "全部完成"

@@ -165,7 +165,7 @@ def main():
     with open("tbd.txt", "a", encoding="utf-8") as out:
 
         for i, (artist, link) in enumerate(artist_list):
-            if i > 1000:
+            if i > 100:
                 break
 
             print(f"[{i}] {artist}")

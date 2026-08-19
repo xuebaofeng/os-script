@@ -78,9 +78,9 @@ def to_py(text):
 
 
 def pick_two_chars(text):
-    if len(text) <= 2:
+    if len(text) <= 3:
         return text
-    return "".join(random.sample(text, 2))
+    return "".join(random.sample(text, 3))
 
 
 def generate():

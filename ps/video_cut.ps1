@@ -1,10 +1,10 @@
 # ====== 配置部分 ======
-$input = "C:\BaiduNetdiskDownload\2012b-ecnl-rl-vs-clovis-crossfire-ecnl-rl-b12-2026-04-19.mov"
+$input = "C:\BaiduNetdiskDownload\2012b-ecnl-rl-vs-palo-alto-soccer-club-12b-2026-05-02.mov"
 
 # 定义时间段数组（可以多个）
 $clips = @(
-    @{start="00:16:45"; end="00:56:18"},
-    @{start="01:10:08"; end="01:52:52"}
+    @{start="00:08:08"; end="00:48:22"},
+    @{start="00:56:40"; end="01:36:10"}
 )
 # =====================
 
