@@ -1,5 +1,5 @@
 SET "USERNAME=fz"
-SET "PASSWORD=prqnoQ!1"
+SET "PASSWORD=tianlongbabuQ!1"
 
 :: 1. 创建用户
 net user %USERNAME% %PASSWORD% /add
