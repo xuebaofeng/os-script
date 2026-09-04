@@ -44,7 +44,8 @@ $SyncthingExe = "C:\ProgramData\chocolatey\bin\syncthing.exe"
 
 $NssmExe = "C:\ProgramData\chocolatey\lib\NSSM\tools\nssm.exe"
 
-$ServiceUser = "7840hs\bx"
+# Automatically use the current Windows account
+$ServiceUser = [System.Security.Principal.WindowsIdentity]::GetCurrent().Name
 
 Write-Host ""
 Write-Host "==========================================" -ForegroundColor Cyan
@@ -190,14 +191,14 @@ try {
         Start `
         SERVICE_AUTO_START
 
-    # Run as Windows user
+    # Run as current Windows user
     & $NssmExe set `
         $ServiceName `
         ObjectName `
         $ServiceUser `
         $PlainPassword
 
-    # Restart automatically
+    # Restart automatically if Syncthing exits
     & $NssmExe set `
         $ServiceName `
         AppExit `
