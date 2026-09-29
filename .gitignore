@@ -5,3 +5,4 @@ song/cache
 song/tbd.txt
 **/*.mp3
 /song/cache/*
+/soccer_backup/client_secret.json
