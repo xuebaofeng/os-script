@@ -1,381 +1,333 @@
-import argparse
-import hashlib
-import json
-import sqlite3
+import os
+import re
 import sys
+import json
 import time
-from pathlib import Path
+import hashlib
+import sqlite3
+from datetime import datetime, timezone
 
 import requests
 
-from google.auth.transport.requests import Request
+from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
+
+# ============================================================
+# Configuration
+# ============================================================
 
 DB_FILE = "soccer_backup.db"
 CLIENT_SECRET_FILE = "client_secret.json"
 TOKEN_FILE = "token.json"
 
-SCOPES = [
-    "https://www.googleapis.com/auth/youtube.upload"
-]
-
 CHUNK_SIZE = 8 * 1024 * 1024
+
+SCOPES = [
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube.readonly",
+]
 
 UPLOAD_URL = (
     "https://www.googleapis.com/upload/youtube/v3/videos"
     "?uploadType=resumable&part=snippet,status"
 )
 
+YOUTUBE_WATCH_URL = "https://www.youtube.com/watch?v={}"
+
 VIDEO_EXTENSIONS = {
-    ".mp4",
-    ".mov",
-    ".m4v",
-    ".avi",
-    ".mkv"
+    ".mp4": "video/mp4",
+    ".mov": "video/quicktime",
+    ".m4v": "video/x-m4v",
+    ".avi": "video/x-msvideo",
+    ".mkv": "video/x-matroska",
 }
 
 
 # ============================================================
-# SQLite helpers
+# SQLite
 # ============================================================
 
-def connect_db(db_file):
-    conn = sqlite3.connect(db_file)
+def db_connect():
+    conn = sqlite3.connect(DB_FILE)
     conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys = ON")
     return conn
 
 
-def ensure_columns(conn):
+def ensure_schema(conn):
     """
-    Add upload-state columns to the existing videos table.
-
-    This does NOT delete or recreate the database.
+    Upgrade existing videos table without deleting data.
     """
 
     columns = {
         row["name"]
-        for row in conn.execute(
-            "PRAGMA table_info(videos)"
-        ).fetchall()
+        for row in conn.execute("PRAGMA table_info(videos)")
     }
 
-    additions = {
-        "upload_session_url":
-            "TEXT",
-
-        "uploaded_bytes":
-            "INTEGER DEFAULT 0",
-
-        "error_message":
-            "TEXT",
-
-        "last_attempt_at":
-            "TEXT"
+    required = {
+        "upload_session_url": "TEXT",
+        "uploaded_bytes": "INTEGER DEFAULT 0",
+        "error_message": "TEXT",
+        "last_attempt_at": "TEXT",
     }
 
-    for name, definition in additions.items():
+    for name, definition in required.items():
         if name not in columns:
-            print(
-                f"Adding videos.{name} ..."
-            )
-
+            print(f"Adding DB column: {name}")
             conn.execute(
-                f"""
-                ALTER TABLE videos
-                ADD COLUMN {name} {definition}
-                """
+                f"ALTER TABLE videos ADD COLUMN {name} {definition}"
             )
 
     conn.commit()
 
 
+def find_video(conn, filepath):
+    """
+    Prefer exact original_path.
+    Fallback to unique filename.
+    """
+
+    row = conn.execute(
+        """
+        SELECT *
+        FROM videos
+        WHERE original_path = ?
+            LIMIT 1
+        """,
+        (filepath,),
+    ).fetchone()
+
+    if row:
+        return row
+
+    filename = os.path.basename(filepath)
+
+    rows = conn.execute(
+        """
+        SELECT *
+        FROM videos
+        WHERE original_filename = ?
+        """,
+        (filename,),
+    ).fetchall()
+
+    if len(rows) == 1:
+        return rows[0]
+
+    return None
+
+
+def update_video(conn, video_id, **fields):
+    if not fields:
+        return
+
+    fields["updated_at"] = datetime.now(timezone.utc).isoformat()
+
+    assignments = ", ".join(
+        f"{key} = ?" for key in fields
+    )
+
+    values = list(fields.values())
+    values.append(video_id)
+
+    conn.execute(
+        f"""
+        UPDATE videos
+        SET {assignments}
+        WHERE id = ?
+        """,
+        values,
+    )
+
+    conn.commit()
+
+
 # ============================================================
-# File
+# SHA256
 # ============================================================
 
-def sha256_file(path):
+def sha256_file(filepath):
+    print("Calculating SHA256...")
+
     h = hashlib.sha256()
 
-    with open(path, "rb") as f:
+    with open(filepath, "rb") as f:
         while True:
-            chunk = f.read(8 * 1024 * 1024)
+            chunk = f.read(16 * 1024 * 1024)
 
             if not chunk:
                 break
 
             h.update(chunk)
 
-    return h.hexdigest()
+    result = h.hexdigest()
+
+    print(f"SHA256: {result}")
+
+    return result
 
 
 # ============================================================
-# Database lookup
+# Trace metadata
 # ============================================================
 
-def find_video(conn, filename, filepath):
-    """
-    Authoritative association is SQLite.
-
-    First:
-        original_path
-
-    Fallback:
-        original_filename, but only if exactly one row exists.
-    """
-
-    rows = conn.execute(
+def load_match(conn, game_id):
+    row = conn.execute(
         """
-        SELECT
-            v.id,
-            v.game_id,
-            v.original_filename,
-            v.original_path,
-            v.period,
-            v.file_size,
-            v.sha256,
-            v.youtube_id,
-            v.youtube_status,
-            v.upload_session_url,
-            v.uploaded_bytes,
-            v.error_message,
-
-            m.full_date,
-            m.division_title,
-
-            m.home_team_title,
-            m.home_team_abbr,
-            m.home_score,
-
-            m.away_team_title,
-            m.away_team_abbr,
-            m.away_score
-
-        FROM videos v
-
-                 JOIN matches m
-                      ON m.game_id = v.game_id
-
-        WHERE v.original_path = ?
-
-            LIMIT 1
+        SELECT *
+        FROM matches
+        WHERE game_id = ?
         """,
-        (filepath,)
-    ).fetchall()
-
-    if rows:
-        return rows[0]
-
-    rows = conn.execute(
-        """
-        SELECT
-            v.id,
-            v.game_id,
-            v.original_filename,
-            v.original_path,
-            v.period,
-            v.file_size,
-            v.sha256,
-            v.youtube_id,
-            v.youtube_status,
-            v.upload_session_url,
-            v.uploaded_bytes,
-            v.error_message,
-
-            m.full_date,
-            m.division_title,
-
-            m.home_team_title,
-            m.home_team_abbr,
-            m.home_score,
-
-            m.away_team_title,
-            m.away_team_abbr,
-            m.away_score
-
-        FROM videos v
-
-                 JOIN matches m
-                      ON m.game_id = v.game_id
-
-        WHERE v.original_filename = ?
-
-            LIMIT 2
-        """,
-        (filename,)
-    ).fetchall()
-
-    if len(rows) == 1:
-        return rows[0]
-
-    if len(rows) > 1:
-        raise RuntimeError(
-            "More than one SQLite record has this filename. "
-            "Use the exact original_path."
-        )
-
-    return None
-
-
-def find_sha_duplicate(conn, sha256):
-    return conn.execute(
-        """
-        SELECT
-            id,
-            game_id,
-            original_filename,
-            original_path,
-            youtube_id,
-            youtube_status
-        FROM videos
-        WHERE sha256 = ?
-            LIMIT 1
-        """,
-        (sha256,)
+        (game_id,),
     ).fetchone()
 
+    return row
 
-def update_sha256(
-        conn,
-        video_id,
+
+def build_title(match, period):
+    home = match["home_team_title"] or match["home_team_name"] or ""
+    away = match["away_team_title"] or match["away_team_name"] or ""
+
+    home_abbr = match["home_team_abbr"] or ""
+    away_abbr = match["away_team_abbr"] or ""
+
+    if home_abbr:
+        home = f"{home} ({home_abbr})"
+
+    if away_abbr:
+        away = f"{away} ({away_abbr})"
+
+    match_date = match["match_date"] or ""
+
+    home_score = match["home_score"]
+    away_score = match["away_score"]
+
+    score = ""
+
+    if home_score is not None and away_score is not None:
+        score = f" | {home_score}-{away_score}"
+
+    return (
+        f"{home} | vs | {away}"
+        f" | {match_date}"
+        f"{score}"
+        f" | {period}"
+    )
+
+
+def build_backup_block(
+        match,
+        game_id,
+        period,
+        filename,
         sha256,
-        file_size
 ):
-    conn.execute(
-        """
-        UPDATE videos
-        SET
-            sha256 = ?,
-            file_size = ?,
-            updated_at = datetime('now')
-        WHERE id = ?
-        """,
-        (
-            sha256,
-            file_size,
-            video_id
-        )
+    home = match["home_team_title"] or match["home_team_name"] or ""
+    away = match["away_team_title"] or match["away_team_name"] or ""
+
+    return f"""[SOCCER_BACKUP]
+game_id={game_id}
+period={period}
+sha256={sha256}
+original_filename={filename}
+match_date={match["match_date"] or ""}
+home_team={home}
+away_team={away}
+home_score={match["home_score"] if match["home_score"] is not None else ""}
+away_score={match["away_score"] if match["away_score"] is not None else ""}
+competition={match["division_title"] or ""}
+source=Trace
+[/SOCCER_BACKUP]"""
+
+
+def build_description(
+        match,
+        game_id,
+        period,
+        filename,
+        sha256,
+):
+    home = match["home_team_title"] or match["home_team_name"] or ""
+    away = match["away_team_title"] or match["away_team_name"] or ""
+
+    home_score = match["home_score"]
+    away_score = match["away_score"]
+
+    score = ""
+
+    if home_score is not None and away_score is not None:
+        score = f"{home_score}-{away_score}"
+
+    block = build_backup_block(
+        match,
+        game_id,
+        period,
+        filename,
+        sha256,
     )
 
-    conn.commit()
+    return f"""Youth soccer match video backup.
+
+Match Date: {match["match_date"] or ""}
+Home: {home}
+Away: {away}
+Score: {score}
+Period: {period}
+Competition: {match["division_title"] or ""}
+Trace Game ID: {game_id}
+
+Original Filename: {filename}
+SHA256: {sha256}
+
+Source: Trace
+
+{block}
+"""
 
 
-def save_session(
-        conn,
-        video_id,
-        session_url
-):
-    conn.execute(
-        """
-        UPDATE videos
-        SET
-            upload_session_url = ?,
-            uploaded_bytes = 0,
-            youtube_status = 'uploading',
-            last_attempt_at = datetime('now'),
-            updated_at = datetime('now')
-        WHERE id = ?
-        """,
-        (
-            session_url,
-            video_id
-        )
-    )
+def build_tags(match, game_id, period):
+    tags = [
+        "soccer",
+        "youth soccer",
+        "MLS NEXT",
+        "MLS Next U15",
+        "U15",
+        period,
+        str(game_id),
+    ]
 
-    conn.commit()
+    for key in [
+        "home_team_title",
+        "home_team_abbr",
+        "away_team_title",
+        "away_team_abbr",
+        "division_title",
+        "match_date",
+    ]:
+        value = match[key]
 
+        if value:
+            tags.append(str(value))
 
-def save_progress(
-        conn,
-        video_id,
-        uploaded_bytes
-):
-    conn.execute(
-        """
-        UPDATE videos
-        SET
-            uploaded_bytes = ?,
-            youtube_status = 'uploading',
-            updated_at = datetime('now')
-        WHERE id = ?
-        """,
-        (
-            uploaded_bytes,
-            video_id
-        )
-    )
+    # YouTube tag limit is 500 characters.
+    result = []
 
-    conn.commit()
+    total = 0
 
+    for tag in tags:
+        if tag in result:
+            continue
 
-def clear_session(
-        conn,
-        video_id
-):
-    conn.execute(
-        """
-        UPDATE videos
-        SET
-            upload_session_url = NULL,
-            uploaded_bytes = 0,
-            updated_at = datetime('now')
-        WHERE id = ?
-        """,
-        (video_id,)
-    )
+        add = len(tag) + (1 if result else 0)
 
-    conn.commit()
+        if total + add > 500:
+            break
 
+        result.append(tag)
+        total += add
 
-def mark_completed(
-        conn,
-        video_id,
-        youtube_id
-):
-    conn.execute(
-        """
-        UPDATE videos
-        SET
-            youtube_id = ?,
-            youtube_status = 'completed',
-            upload_session_url = NULL,
-            uploaded_bytes = 0,
-            error_message = NULL,
-            updated_at = datetime('now')
-        WHERE id = ?
-        """,
-        (
-            youtube_id,
-            video_id
-        )
-    )
-
-    conn.commit()
-
-
-def mark_failed(
-        conn,
-        video_id,
-        message
-):
-    conn.execute(
-        """
-        UPDATE videos
-        SET
-            youtube_status = 'failed',
-            error_message = ?,
-            updated_at = datetime('now')
-        WHERE id = ?
-        """,
-        (
-            message,
-            video_id
-        )
-    )
-
-    conn.commit()
+    return result
 
 
 # ============================================================
@@ -385,217 +337,342 @@ def mark_failed(
 def get_credentials():
     creds = None
 
-    if Path(TOKEN_FILE).exists():
-        creds = Credentials.from_authorized_user_file(
-            TOKEN_FILE,
-            SCOPES
-        )
-
-    if creds and creds.expired and creds.refresh_token:
-        print("Refreshing Google OAuth token...")
-        creds.refresh(Request())
-
-        with open(
+    if os.path.exists(TOKEN_FILE):
+        try:
+            creds = Credentials.from_authorized_user_file(
                 TOKEN_FILE,
-                "w",
-                encoding="utf-8"
-        ) as f:
-            f.write(creds.to_json())
+                SCOPES,
+            )
+        except Exception:
+            creds = None
 
     if not creds or not creds.valid:
-        print("Starting Google OAuth...")
+        if creds and creds.expired and creds.refresh_token:
+            from google.auth.transport.requests import Request
 
-        flow = InstalledAppFlow.from_client_secrets_file(
-            CLIENT_SECRET_FILE,
-            SCOPES
-        )
+            print("Refreshing Google OAuth token...")
+            creds.refresh(Request())
 
-        creds = flow.run_local_server(
-            port=0
-        )
+        else:
+            print("Starting Google OAuth...")
 
-        with open(
-                TOKEN_FILE,
-                "w",
-                encoding="utf-8"
-        ) as f:
+            flow = InstalledAppFlow.from_client_secrets_file(
+                CLIENT_SECRET_FILE,
+                SCOPES,
+            )
+
+            creds = flow.run_local_server(
+                port=0,
+                access_type="offline",
+                prompt="consent",
+            )
+
+        with open(TOKEN_FILE, "w", encoding="utf-8") as f:
             f.write(creds.to_json())
 
     return creds
 
 
 # ============================================================
-# YouTube metadata
+# YouTube API
 # ============================================================
 
-def team_display(title, abbr):
-    if title and abbr:
-        return f"{title} ({abbr})"
+def youtube_session():
+    creds = get_credentials()
 
-    return title or abbr or ""
-
-
-def format_date(full_date):
-    if not full_date:
-        return ""
-
-    return full_date[:10]
+    return AuthorizedSession(creds)
 
 
-def build_title(match, period):
-    home = team_display(
-        match["home_team_title"],
-        match["home_team_abbr"]
+def youtube_video_info(session, video_id):
+    """
+    Directly verify a known YouTube video ID.
+    """
+
+    response = session.get(
+        "https://www.googleapis.com/youtube/v3/videos",
+        params={
+            "part": "snippet,status,processingDetails,contentDetails",
+            "id": video_id,
+        },
+        timeout=60,
     )
 
-    away = team_display(
-        match["away_team_title"],
-        match["away_team_abbr"]
+    if response.status_code != 200:
+        return None
+
+    data = response.json()
+
+    items = data.get("items", [])
+
+    if not items:
+        return None
+
+    return items[0]
+
+
+def extract_backup_metadata(description):
+    """
+    Extract our machine-readable metadata block.
+    """
+
+    if not description:
+        return {}
+
+    match = re.search(
+        r"\[SOCCER_BACKUP\](.*?)\[/SOCCER_BACKUP\]",
+        description,
+        re.DOTALL,
     )
 
-    date = format_date(
-        match["full_date"]
+    if not match:
+        return {}
+
+    result = {}
+
+    for line in match.group(1).splitlines():
+        line = line.strip()
+
+        if "=" not in line:
+            continue
+
+        key, value = line.split("=", 1)
+
+        result[key.strip()] = value.strip()
+
+    return result
+
+
+def get_uploads_playlist_id(session):
+    response = session.get(
+        "https://www.googleapis.com/youtube/v3/channels",
+        params={
+            "part": "contentDetails",
+            "mine": "true",
+        },
+        timeout=60,
     )
 
-    parts = [
-        home,
-        "vs",
-        away
-    ]
+    response.raise_for_status()
 
-    if date:
-        parts.append(date)
+    items = response.json().get("items", [])
 
-    if (
-            match["home_score"] is not None
-            and match["away_score"] is not None
-    ):
-        parts.append(
-            f"{match['home_score']}-"
-            f"{match['away_score']}"
+    if not items:
+        raise RuntimeError("No YouTube channel found.")
+
+    return (
+        items[0]["contentDetails"]
+        ["relatedPlaylists"]
+        ["uploads"]
+    )
+
+
+def find_existing_video_on_youtube(
+        session,
+        sha256,
+        game_id,
+        period,
+):
+    """
+    Scan the user's own YouTube uploads and find our backup record.
+
+    Priority:
+      1. SHA256 exact match
+      2. Game ID + Period exact match
+    """
+
+    print()
+    print("Checking YouTube for an existing upload...")
+
+    playlist_id = get_uploads_playlist_id(session)
+
+    page_token = None
+
+    sha_match = None
+    game_period_match = None
+
+    scanned = 0
+
+    while True:
+        params = {
+            "part": "contentDetails",
+            "playlistId": playlist_id,
+            "maxResults": 50,
+        }
+
+        if page_token:
+            params["pageToken"] = page_token
+
+        response = session.get(
+            "https://www.googleapis.com/youtube/v3/playlistItems",
+            params=params,
+            timeout=60,
         )
 
-    if period:
-        parts.append(period)
+        response.raise_for_status()
 
-    return " | ".join(parts)
+        data = response.json()
 
+        ids = []
 
-def build_description(match, period):
-    home = team_display(
-        match["home_team_title"],
-        match["home_team_abbr"]
-    )
+        for item in data.get("items", []):
+            video_id = (
+                item.get("contentDetails", {})
+                .get("videoId")
+            )
 
-    away = team_display(
-        match["away_team_title"],
-        match["away_team_abbr"]
-    )
+            if video_id:
+                ids.append(video_id)
 
-    lines = [
-        "Youth Soccer Match Video",
-        "",
-        f"Match Date: "
-        f"{format_date(match['full_date'])}",
-        f"Match: {home} vs {away}",
-    ]
+        if ids:
+            response = session.get(
+                "https://www.googleapis.com/youtube/v3/videos",
+                params={
+                    "part": "snippet,status,processingDetails",
+                    "id": ",".join(ids),
+                },
+                timeout=60,
+            )
 
-    if (
-            match["home_score"] is not None
-            and match["away_score"] is not None
-    ):
-        lines.append(
-            f"Score: "
-            f"{match['home_score']}-"
-            f"{match['away_score']}"
-        )
+            response.raise_for_status()
 
-    if period:
-        lines.append(
-            f"Period: {period}"
-        )
+            videos = response.json().get("items", [])
 
-    if match["division_title"]:
-        lines.append(
-            f"Competition: "
-            f"{match['division_title']}"
-        )
+            scanned += len(videos)
 
-    lines.extend([
-        "",
-        f"Trace Game ID: {match['game_id']}",
-        "Source: Trace",
-        "",
-        "Archived for personal soccer "
-        "video backup and analysis."
-    ])
+            for video in videos:
+                video_id = video["id"]
 
-    return "\n".join(lines)
+                snippet = video.get("snippet", {})
+                description = snippet.get("description", "")
 
+                metadata = extract_backup_metadata(description)
 
-def build_tags(match, period):
-    tags = []
+                if metadata.get("sha256") == sha256:
+                    sha_match = video
+                    break
 
-    def add(value):
-        if value and value not in tags:
-            tags.append(value)
+                if (
+                        metadata.get("game_id") == str(game_id)
+                        and metadata.get("period") == period
+                ):
+                    game_period_match = video
 
-    add(match["home_team_title"])
-    add(match["home_team_abbr"])
+        if sha_match:
+            break
 
-    add(match["away_team_title"])
-    add(match["away_team_abbr"])
+        page_token = data.get("nextPageToken")
 
-    add(match["division_title"])
+        if not page_token:
+            break
 
-    add("soccer")
-    add("youth soccer")
-    add("MLS NEXT")
-    add("MLS Next U15")
-    add("U15")
+    print(f"Checked {scanned} YouTube videos.")
 
-    add(format_date(match["full_date"]))
+    if sha_match:
+        print("FOUND EXACT SHA256 MATCH.")
+        return sha_match, "sha256"
 
-    add(period)
+    if game_period_match:
+        print("FOUND GAME ID + PERIOD MATCH.")
+        return game_period_match, "game_period"
 
-    return tags
+    print("No existing backup video found.")
+
+    return None, None
 
 
 # ============================================================
-# Resumable upload
+# Reconcile SQLite
+# ============================================================
+
+def reconcile_existing_video(
+        conn,
+        video_row,
+        youtube_video,
+        match_type,
+):
+    video_id = youtube_video["id"]
+
+    status = (
+        youtube_video
+        .get("status", {})
+        .get("uploadStatus", "uploaded")
+    )
+
+    processing_status = (
+        youtube_video
+        .get("processingDetails", {})
+        .get("processingStatus")
+    )
+
+    if processing_status == "succeeded":
+        youtube_status = "completed"
+
+    elif status in ("deleted", "failed"):
+        youtube_status = status
+
+    else:
+        youtube_status = "uploaded"
+
+    update_video(
+        conn,
+        video_row["id"],
+        youtube_id=video_id,
+        youtube_status=youtube_status,
+        upload_session_url=None,
+        uploaded_bytes=0,
+        error_message=None,
+    )
+
+    print()
+    print("========================================")
+    print("EXISTING YOUTUBE VIDEO FOUND")
+    print("========================================")
+    print(f"YouTube ID : {video_id}")
+    print(f"URL        : {YOUTUBE_WATCH_URL.format(video_id)}")
+    print(f"Match type : {match_type}")
+    print(f"Status     : {youtube_status}")
+    print("SQLite     : updated")
+    print("Upload     : SKIPPED")
+    print("========================================")
+
+    return True
+
+
+# ============================================================
+# Upload session
 # ============================================================
 
 def create_upload_session(
         session,
         metadata,
+        content_type,
         file_size,
-        content_type
 ):
     headers = {
+        "X-Upload-Content-Length": str(file_size),
+        "X-Upload-Content-Type": content_type,
         "Content-Type": "application/json; charset=UTF-8",
-        "X-Upload-Content-Length":
-            str(file_size),
-        "X-Upload-Content-Type":
-            content_type
+    }
+
+    body = {
+        "snippet": metadata["snippet"],
+        "status": metadata["status"],
     }
 
     response = session.post(
         UPLOAD_URL,
         headers=headers,
-        json=metadata,
-        timeout=120
+        json=body,
+        timeout=60,
     )
 
     if response.status_code not in (200, 201):
         raise RuntimeError(
-            "Failed to create YouTube upload session:\n"
-            f"HTTP {response.status_code}\n"
-            f"{response.text}"
+            f"Could not create upload session: "
+            f"{response.status_code} {response.text}"
         )
 
-    location = response.headers.get(
-        "Location"
-    )
+    location = response.headers.get("Location")
 
     if not location:
         raise RuntimeError(
@@ -605,120 +682,89 @@ def create_upload_session(
     return location
 
 
-def parse_range(response):
-    value = response.headers.get(
-        "Range"
-    )
-
-    if not value:
-        return None
-
-    # Example:
-    # bytes=0-8388607
-
-    try:
-        last_byte = int(
-            value.split("-")[-1]
-        )
-
-        return last_byte + 1
-
-    except Exception:
-        return None
-
-
 def query_upload_position(
         session,
         session_url,
-        file_size
+        file_size,
 ):
     headers = {
         "Content-Length": "0",
-        "Content-Range":
-            f"bytes */{file_size}"
+        "Content-Range": f"bytes */{file_size}",
     }
 
     response = session.put(
         session_url,
         headers=headers,
-        timeout=120
+        timeout=60,
     )
 
     if response.status_code == 308:
-        position = parse_range(response)
+        range_header = response.headers.get("Range")
 
-        if position is None:
+        if not range_header:
             return 0
 
-        return position
+        match = re.search(
+            r"bytes=0-(\d+)",
+            range_header,
+        )
+
+        if not match:
+            return 0
+
+        return int(match.group(1)) + 1
 
     if response.status_code in (200, 201):
         return file_size
 
-    if response.status_code in (
-            404,
-            410
-    ):
-        return None
+    if response.status_code in (404, 410):
+        raise RuntimeError("UPLOAD_SESSION_EXPIRED")
+
+    if response.status_code == 401:
+        raise RuntimeError("AUTH_REFRESH_REQUIRED")
 
     raise RuntimeError(
-        "Failed to query upload position:\n"
-        f"HTTP {response.status_code}\n"
-        f"{response.text}"
+        f"Upload position query failed: "
+        f"{response.status_code} {response.text}"
     )
 
 
 def upload_chunks(
         session,
         session_url,
-        file_path,
-        file_size,
-        start_offset,
+        filepath,
+        start_byte,
+        video_row,
         conn,
-        video_id
 ):
-    offset = start_offset
+    file_size = os.path.getsize(filepath)
 
-    with open(
-            file_path,
-            "rb"
-    ) as f:
+    content_type = VIDEO_EXTENSIONS.get(
+        os.path.splitext(filepath)[1].lower(),
+        "application/octet-stream",
+    )
 
-        f.seek(offset)
+    current = start_byte
 
-        while offset < file_size:
+    with open(filepath, "rb") as f:
 
-            data = f.read(
-                min(
-                    CHUNK_SIZE,
-                    file_size - offset
-                )
-            )
+        f.seek(current)
+
+        while current < file_size:
+            data = f.read(CHUNK_SIZE)
 
             if not data:
                 break
 
-            chunk_start = offset
-            chunk_end = (
-                    offset +
-                    len(data) -
-                    1
-            )
+            end = current + len(data) - 1
 
             headers = {
-                "Content-Length":
-                    str(len(data)),
-
-                "Content-Range":
-                    (
-                        f"bytes "
-                        f"{chunk_start}-"
-                        f"{chunk_end}/"
-                        f"{file_size}"
-                    )
+                "Content-Length": str(len(data)),
+                "Content-Type": content_type,
+                "Content-Range": (
+                    f"bytes {current}-{end}/{file_size}"
+                ),
             }
-
-            retry = 0
 
             while True:
                 try:
@@ -726,704 +772,427 @@ def upload_chunks(
                         session_url,
                         headers=headers,
                         data=data,
-                        timeout=300
+                        timeout=300,
+                    )
+
+                except requests.RequestException as e:
+                    print()
+                    print(f"Network error: {e}")
+                    print("Progress preserved in SQLite.")
+                    raise
+
+                if response.status_code in (200, 201):
+                    result = response.json()
+
+                    update_video(
+                        conn,
+                        video_row["id"],
+                        youtube_id=result["id"],
+                        youtube_status="completed",
+                        upload_session_url=None,
+                        uploaded_bytes=0,
+                        error_message=None,
+                    )
+
+                    print()
+                    print("========================================")
+                    print("UPLOAD COMPLETED")
+                    print("========================================")
+                    print(
+                        f"YouTube ID : {result['id']}"
+                    )
+                    print(
+                        "URL        : "
+                        + YOUTUBE_WATCH_URL.format(result["id"])
+                    )
+                    print("========================================")
+
+                    return result["id"]
+
+                if response.status_code == 308:
+                    current = end + 1
+
+                    update_video(
+                        conn,
+                        video_row["id"],
+                        uploaded_bytes=current,
+                        youtube_status="uploading",
+                        upload_session_url=session_url,
+                        error_message=None,
+                    )
+
+                    percent = (
+                        current * 100 / file_size
+                        if file_size
+                        else 100
+                    )
+
+                    print(
+                        f"\rUploaded "
+                        f"{current:,}/{file_size:,} "
+                        f"({percent:.1f}%)",
+                        end="",
+                        flush=True,
                     )
 
                     break
 
-                except requests.RequestException as e:
-                    retry += 1
-
-                    if retry > 8:
-                        raise RuntimeError(
-                            f"Network error after retries: {e}"
-                        )
-
-                    wait = min(
-                        2 ** retry,
-                        60
+                if response.status_code in (404, 410):
+                    raise RuntimeError(
+                        "UPLOAD_SESSION_EXPIRED"
                     )
 
+                if response.status_code == 401:
+                    raise RuntimeError(
+                        "AUTH_REFRESH_REQUIRED"
+                    )
+
+                if response.status_code in (
+                        408,
+                        429,
+                        500,
+                        502,
+                        503,
+                        504,
+                ):
                     print()
                     print(
-                        f"Network error. "
-                        f"Retrying in {wait}s..."
+                        f"Temporary YouTube error "
+                        f"{response.status_code}; retrying..."
                     )
 
-                    time.sleep(wait)
+                    time.sleep(5)
 
-            # Upload complete.
-            if response.status_code in (
-                    200,
-                    201
-            ):
-                result = response.json()
-
-                youtube_id = result.get(
-                    "id"
-                )
-
-                if not youtube_id:
-                    raise RuntimeError(
-                        "YouTube completed upload "
-                        "but returned no video ID."
-                    )
-
-                save_progress(
-                    conn,
-                    video_id,
-                    file_size
-                )
-
-                return youtube_id
-
-            # Chunk accepted.
-            if response.status_code == 308:
-                server_position = parse_range(
-                    response
-                )
-
-                if server_position is None:
-                    offset = chunk_end + 1
-                else:
-                    offset = server_position
-
-                save_progress(
-                    conn,
-                    video_id,
-                    offset
-                )
-
-                f.seek(offset)
-
-                percent = (
-                        offset *
-                        100 /
-                        file_size
-                )
-
-                print(
-                    f"\rUploaded: "
-                    f"{percent:6.2f}% "
-                    f"({offset:,}/"
-                    f"{file_size:,} bytes)",
-                    end="",
-                    flush=True
-                )
-
-                continue
-
-            # Session expired.
-            if response.status_code in (
-                    404,
-                    410
-            ):
-                raise RuntimeError(
-                    "UPLOAD_SESSION_EXPIRED"
-                )
-
-            # Token expired / auth issue.
-            if response.status_code == 401:
-                print()
-                print(
-                    "OAuth token expired. "
-                    "Refreshing..."
-                )
-
-                session.auth = None
+                    continue
 
                 raise RuntimeError(
-                    "AUTH_REFRESH_REQUIRED"
+                    f"Chunk upload failed: "
+                    f"{response.status_code} "
+                    f"{response.text}"
                 )
-
-            # Temporary Google error.
-            if response.status_code in (
-                    429,
-                    500,
-                    502,
-                    503,
-                    504
-            ):
-                retry += 1
-
-                if retry > 8:
-                    raise RuntimeError(
-                        "Too many YouTube server errors:\n"
-                        f"{response.text}"
-                    )
-
-                wait = min(
-                    2 ** retry,
-                    60
-                )
-
-                print()
-                print(
-                    f"YouTube HTTP "
-                    f"{response.status_code}. "
-                    f"Retrying in {wait}s..."
-                )
-
-                time.sleep(wait)
-
-                continue
-
-            raise RuntimeError(
-                "YouTube upload failed:\n"
-                f"HTTP {response.status_code}\n"
-                f"{response.text}"
-            )
 
     raise RuntimeError(
-        "Upload ended without a YouTube video ID."
+        "Upload ended without YouTube completion."
     )
 
 
-def resumable_upload(
-        creds,
-        conn,
-        video_id,
-        file_path,
-        metadata,
-        existing_session_url
-):
-    file_size = file_path.stat().st_size
+# ============================================================
+# Main upload
+# ============================================================
 
-    session = requests.Session()
+def upload_video(filepath):
+    filepath = os.path.abspath(filepath)
 
-    session.headers.update({
-        "Authorization":
-            f"Bearer {creds.token}"
-    })
+    if not os.path.isfile(filepath):
+        raise FileNotFoundError(filepath)
 
-    session_url = existing_session_url
+    extension = os.path.splitext(filepath)[1].lower()
+
+    if extension not in VIDEO_EXTENSIONS:
+        raise RuntimeError(
+            f"Unsupported video extension: {extension}"
+        )
+
+    filename = os.path.basename(filepath)
+
+    conn = db_connect()
+
+    ensure_schema(conn)
+
+    video_row = find_video(conn, filepath)
+
+    if not video_row:
+        raise RuntimeError(
+            "Video is not registered in SQLite.\n\n"
+            "Run trace_import.py first:\n"
+            f'py trace_import.py "{filepath}" GAME_ID '
+            '--trace-json=trace.json'
+        )
+
+    game_id = video_row["game_id"]
+    period = video_row["period"]
+
+    if not period:
+        raise RuntimeError(
+            "Video has no period. Expected period-1 or period-2."
+        )
+
+    match = load_match(conn, game_id)
+
+    if not match:
+        raise RuntimeError(
+            f"No match metadata found for Game ID {game_id}."
+        )
 
     # --------------------------------------------------------
-    # Existing session
+    # SHA256
     # --------------------------------------------------------
+
+    sha256 = video_row["sha256"]
+
+    if not sha256:
+        sha256 = sha256_file(filepath)
+
+        update_video(
+            conn,
+            video_row["id"],
+            sha256=sha256,
+        )
+
+    else:
+        print(f"SHA256 from SQLite: {sha256}")
+
+    # --------------------------------------------------------
+    # OAuth / YouTube
+    # --------------------------------------------------------
+
+    session = youtube_session()
+
+    # --------------------------------------------------------
+    # FIRST CHECK:
+    # If SQLite has a YouTube ID, verify it directly.
+    # --------------------------------------------------------
+
+    if video_row["youtube_id"]:
+        print()
+        print(
+            "SQLite contains YouTube ID: "
+            + video_row["youtube_id"]
+        )
+
+        existing = youtube_video_info(
+            session,
+            video_row["youtube_id"],
+        )
+
+        if existing:
+            reconcile_existing_video(
+                conn,
+                video_row,
+                existing,
+                "sqlite_youtube_id",
+            )
+
+            conn.close()
+            return
+
+        print(
+            "SQLite YouTube ID no longer exists. "
+            "Searching uploads..."
+        )
+
+    # --------------------------------------------------------
+    # SECOND CHECK:
+    # Search own YouTube uploads using SHA256.
+    # --------------------------------------------------------
+
+    existing, match_type = find_existing_video_on_youtube(
+        session,
+        sha256,
+        game_id,
+        period,
+    )
+
+    if existing:
+        reconcile_existing_video(
+            conn,
+            video_row,
+            existing,
+            match_type,
+        )
+
+        conn.close()
+        return
+
+    # --------------------------------------------------------
+    # Build metadata
+    # --------------------------------------------------------
+
+    title = build_title(
+        match,
+        period,
+    )
+
+    description = build_description(
+        match,
+        game_id,
+        period,
+        filename,
+        sha256,
+    )
+
+    tags = build_tags(
+        match,
+        game_id,
+        period,
+    )
+
+    metadata = {
+        "snippet": {
+            "title": title,
+            "description": description,
+            "tags": tags,
+            "categoryId": "17",
+        },
+        "status": {
+            "privacyStatus": "private",
+            "selfDeclaredMadeForKids": False,
+        },
+    }
+
+    print()
+    print("========================================")
+    print("NEW YOUTUBE UPLOAD")
+    print("========================================")
+    print(f"File       : {filename}")
+    print(f"Game ID    : {game_id}")
+    print(f"Period     : {period}")
+    print(f"Match Date : {match['match_date']}")
+    print(f"Title      : {title}")
+    print(f"Size       : {os.path.getsize(filepath):,} bytes")
+    print("Privacy    : private")
+    print("========================================")
+
+    # --------------------------------------------------------
+    # Existing resumable session
+    # --------------------------------------------------------
+
+    session_url = video_row["upload_session_url"]
+    uploaded_bytes = video_row["uploaded_bytes"] or 0
+
+    file_size = os.path.getsize(filepath)
 
     if session_url:
         print()
-        print(
-            "Existing YouTube upload session found."
-        )
-
-        print(
-            "Checking server-side upload position..."
-        )
+        print("Existing resumable upload session found.")
 
         try:
-            offset = query_upload_position(
+            server_position = query_upload_position(
                 session,
                 session_url,
-                file_size
+                file_size,
             )
 
-        except requests.RequestException:
-            offset = None
-
-        if offset is None:
             print(
-                "Existing upload session is no longer valid."
+                f"YouTube upload position: "
+                f"{server_position:,}/{file_size:,}"
             )
 
-            session_url = None
+            uploaded_bytes = server_position
 
-            clear_session(
-                conn,
-                video_id
-            )
+        except RuntimeError as e:
+            if str(e) == "UPLOAD_SESSION_EXPIRED":
+                print(
+                    "Existing upload session expired. "
+                    "Creating a new one."
+                )
 
-        else:
-            print(
-                f"Server says upload position: "
-                f"{offset:,} bytes"
-            )
+                session_url = None
+                uploaded_bytes = 0
+
+            else:
+                raise
 
     # --------------------------------------------------------
-    # New session
+    # Create new resumable session
     # --------------------------------------------------------
 
     if not session_url:
-        print()
-        print(
-            "Creating new YouTube upload session..."
-        )
+
+        content_type = VIDEO_EXTENSIONS[extension]
+
+        print("Creating YouTube resumable upload session...")
 
         session_url = create_upload_session(
             session,
             metadata,
+            content_type,
             file_size,
-            "video/quicktime"
-            if file_path.suffix.lower() == ".mov"
-            else "video/mp4"
         )
 
-        save_session(
+        uploaded_bytes = 0
+
+        update_video(
             conn,
-            video_id,
-            session_url
-        )
-
-        offset = 0
-
-        print(
-            "Upload session saved to SQLite."
+            video_row["id"],
+            upload_session_url=session_url,
+            uploaded_bytes=0,
+            youtube_status="uploading",
+            error_message=None,
+            last_attempt_at=datetime.now(
+                timezone.utc
+            ).isoformat(),
         )
 
     # --------------------------------------------------------
     # Upload
     # --------------------------------------------------------
 
-    while True:
-
-        try:
-            youtube_id = upload_chunks(
-                session,
-                session_url,
-                file_path,
-                file_size,
-                offset,
-                conn,
-                video_id
-            )
-
-            return youtube_id
-
-        except RuntimeError as e:
-
-            if str(e) == "UPLOAD_SESSION_EXPIRED":
-                print()
-                print(
-                    "Upload session expired."
-                )
-
-                clear_session(
-                    conn,
-                    video_id
-                )
-
-                # Create a fresh session.
-                session_url = create_upload_session(
-                    session,
-                    metadata,
-                    file_size,
-                    "video/quicktime"
-                    if file_path.suffix.lower() == ".mov"
-                    else "video/mp4"
-                )
-
-                save_session(
-                    conn,
-                    video_id,
-                    session_url
-                )
-
-                offset = 0
-
-                print(
-                    "New upload session created."
-                )
-
-                continue
-
-            if str(e) == "AUTH_REFRESH_REQUIRED":
-                raise
-
-            raise
-
-
-# ============================================================
-# Main
-# ============================================================
-
-def main():
-    parser = argparse.ArgumentParser()
-
-    parser.add_argument(
-        "filename"
-    )
-
-    parser.add_argument(
-        "--db",
-        default=DB_FILE
-    )
-
-    args = parser.parse_args()
-
-    file_path = Path(
-        args.filename
-    ).resolve()
-
-    if not file_path.is_file():
-        raise SystemExit(
-            f"ERROR: File not found:\n"
-            f"{file_path}"
-        )
-
-    if file_path.suffix.lower() not in VIDEO_EXTENSIONS:
-        raise SystemExit(
-            f"ERROR: Unsupported video extension: "
-            f"{file_path.suffix}"
-        )
-
-    filename = file_path.name
-    filepath = str(file_path)
-
-    # --------------------------------------------------------
-    # Database
-    # --------------------------------------------------------
-
-    conn = connect_db(
-        args.db
-    )
-
     try:
-        ensure_columns(
-            conn
-        )
-
-        video = find_video(
+        youtube_id = upload_chunks(
+            session,
+            session_url,
+            filepath,
+            uploaded_bytes,
+            video_row,
             conn,
-            filename,
-            filepath
         )
 
-        if video is None:
-            raise SystemExit(
-                "\nERROR:\n"
-                "This video has not been imported "
-                "into SQLite.\n\n"
-                "Run trace_import.py first.\n"
-                "The uploader will NOT guess the "
-                "Trace Game ID from the filename."
-            )
-
-        video_id = video["id"]
-        game_id = video["game_id"]
-
+    except KeyboardInterrupt:
         print()
-        print(
-            f"SQLite video ID : {video_id}"
-        )
+        print("Upload interrupted by user.")
+        print("Resumable session preserved.")
 
-        print(
-            f"Trace Game ID   : {game_id}"
-        )
-
-        print(
-            f"Period          : "
-            f"{video['period'] or 'UNKNOWN'}"
-        )
-
-        # ----------------------------------------------------
-        # SHA256
-        # ----------------------------------------------------
-
-        print()
-        print(
-            f"Calculating SHA256: {file_path}"
-        )
-
-        sha256 = sha256_file(
-            file_path
-        )
-
-        print(
-            f"SHA256: {sha256}"
-        )
-
-        # ----------------------------------------------------
-        # SHA duplicate
-        # ----------------------------------------------------
-
-        duplicate = find_sha_duplicate(
+        update_video(
             conn,
-            sha256
+            video_row["id"],
+            upload_session_url=session_url,
+            uploaded_bytes=uploaded_bytes,
+            youtube_status="paused",
+            error_message=None,
         )
 
-        if duplicate and duplicate["id"] != video_id:
-
-            print()
-            print(
-                "DUPLICATE FILE"
-            )
-
-            print(
-                f"Existing SQLite ID: "
-                f"{duplicate['id']}"
-            )
-
-            print(
-                f"Existing Game ID: "
-                f"{duplicate['game_id']}"
-            )
-
-            print(
-                f"Existing YouTube ID: "
-                f"{duplicate['youtube_id']}"
-            )
-
-            return
-
-        if video["sha256"] != sha256:
-            update_sha256(
-                conn,
-                video_id,
-                sha256,
-                file_path.stat().st_size
-            )
-
-        # ----------------------------------------------------
-        # Already completed
-        # ----------------------------------------------------
-
-        if video["youtube_id"]:
-            print()
-            print(
-                "ALREADY UPLOADED"
-            )
-
-            print(
-                f"YouTube ID: "
-                f"{video['youtube_id']}"
-            )
-
-            print(
-                "https://www.youtube.com/watch?v="
-                f"{video['youtube_id']}"
-            )
-
-            return
-
-        # ----------------------------------------------------
-        # Match metadata
-        # ----------------------------------------------------
-
-        match = {
-            "game_id":
-                video["game_id"],
-
-            "full_date":
-                video["full_date"],
-
-            "division_title":
-                video["division_title"],
-
-            "home_team_title":
-                video["home_team_title"],
-
-            "home_team_abbr":
-                video["home_team_abbr"],
-
-            "home_score":
-                video["home_score"],
-
-            "away_team_title":
-                video["away_team_title"],
-
-            "away_team_abbr":
-                video["away_team_abbr"],
-
-            "away_score":
-                video["away_score"]
-        }
-
-        period = video["period"]
-
-        title = build_title(
-            match,
-            period
-        )
-
-        description = build_description(
-            match,
-            period
-        )
-
-        tags = build_tags(
-            match,
-            period
-        )
-
-        metadata = {
-            "snippet": {
-                "title": title,
-                "description": description,
-                "tags": tags,
-                "categoryId": "17"
-            },
-            "status": {
-                "privacyStatus": "private",
-                "selfDeclaredMadeForKids": False
-            }
-        }
-
-        # ----------------------------------------------------
-        # Display metadata
-        # ----------------------------------------------------
-
-        print()
-        print("=" * 70)
-        print("YouTube metadata")
-        print("=" * 70)
-
-        print()
-        print("TITLE:")
-        print(title)
-
-        print()
-        print("TAGS:")
-        print(", ".join(tags))
-
-        print()
-        print("DESCRIPTION:")
-        print(description)
-
-        print()
-        print(
-            "Privacy: PRIVATE"
-        )
-
-        # ----------------------------------------------------
-        # OAuth
-        # ----------------------------------------------------
-
-        creds = get_credentials()
-
-        # ----------------------------------------------------
-        # Existing resumable session
-        # ----------------------------------------------------
-
-        existing_session_url = (
-            video["upload_session_url"]
-        )
-
-        if existing_session_url:
-            print()
-            print(
-                "RESUMABLE UPLOAD"
-            )
-
-            print(
-                "A previous upload session exists."
-            )
-
-            print(
-                "The upload will attempt to continue "
-                "from the existing session."
-            )
-
-        else:
-            print()
-            print(
-                "RESUMABLE UPLOAD"
-            )
-
-            print(
-                "No previous upload session."
-            )
-
-            print(
-                "A new session will be created."
-            )
-
-        # ----------------------------------------------------
-        # Upload
-        # ----------------------------------------------------
-
-        try:
-            youtube_id = resumable_upload(
-                creds,
-                conn,
-                video_id,
-                file_path,
-                metadata,
-                existing_session_url
-            )
-
-        except KeyboardInterrupt:
-            print()
-            print()
-            print(
-                "Upload interrupted."
-            )
-
-            print(
-                "The upload session remains in SQLite."
-            )
-
-            print(
-                "Run the same command again "
-                "to continue."
-            )
-
-            update_upload_status = """
-                                   UPDATE videos
-                                   SET
-                                       youtube_status = 'paused',
-                                       updated_at = datetime('now')
-                                   WHERE id = ? \
-                                   """
-
-            conn.execute(
-                update_upload_status,
-                (video_id,)
-            )
-
-            conn.commit()
-
-            return
-
-        except Exception as e:
-            mark_failed(
-                conn,
-                video_id,
-                str(e)
-            )
-
-            raise
-
-        # ----------------------------------------------------
-        # Completed
-        # ----------------------------------------------------
-
-        mark_completed(
-            conn,
-            video_id,
-            youtube_id
-        )
-
-        print()
-        print(
-            "=" * 70
-        )
-
-        print(
-            "UPLOAD COMPLETED"
-        )
-
-        print(
-            f"YouTube ID : {youtube_id}"
-        )
-
-        print(
-            "YouTube URL: "
-            f"https://www.youtube.com/watch?v="
-            f"{youtube_id}"
-        )
-
-        print(
-            "Privacy    : PRIVATE"
-        )
-
-        print(
-            "=" * 70
-        )
-
-    finally:
         conn.close()
+        return
 
+    except Exception as e:
+        print()
+        print(f"ERROR: {e}")
+
+        update_video(
+            conn,
+            video_row["id"],
+            upload_session_url=session_url,
+            uploaded_bytes=uploaded_bytes,
+            youtube_status="paused",
+            error_message=str(e),
+        )
+
+        conn.close()
+        raise
+
+    conn.close()
+
+    return youtube_id
+
+
+# ============================================================
+# Entry point
+# ============================================================
 
 if __name__ == "__main__":
-    main()
+
+    if len(sys.argv) != 2:
+        print(
+            'Usage:\n'
+            '  py youtube_backup.py "VIDEO_FILE"'
+        )
+        sys.exit(1)
+
+    try:
+        upload_video(sys.argv[1])
+
+    except Exception as e:
+        print()
+        print(f"ERROR: {e}")
+        sys.exit(1)
