@@ -13,6 +13,12 @@ from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 
+from youtube_metadata import (
+    build_title,
+    build_description,
+    build_tags,
+)
+
 
 # ============================================================
 # Configuration
@@ -185,36 +191,6 @@ def load_match(conn, game_id):
     return row
 
 
-def build_title(match, period):
-    home = match["home_team_title"] or match["home_team_name"] or ""
-    away = match["away_team_title"] or match["away_team_name"] or ""
-
-    home_abbr = match["home_team_abbr"] or ""
-    away_abbr = match["away_team_abbr"] or ""
-
-    if home_abbr:
-        home = f"{home} ({home_abbr})"
-
-    if away_abbr:
-        away = f"{away} ({away_abbr})"
-
-    match_date = match["match_date"] or ""
-
-    home_score = match["home_score"]
-    away_score = match["away_score"]
-
-    score = ""
-
-    if home_score is not None and away_score is not None:
-        score = f" | {home_score}-{away_score}"
-
-    return (
-        f"{home} | vs | {away}"
-        f" | {match_date}"
-        f"{score}"
-        f" | {period}"
-    )
-
 
 def build_backup_block(
         match,
@@ -240,94 +216,6 @@ competition={match["division_title"] or ""}
 source=Trace
 [/SOCCER_BACKUP]"""
 
-
-def build_description(
-        match,
-        game_id,
-        period,
-        filename,
-        sha256,
-):
-    home = match["home_team_title"] or match["home_team_name"] or ""
-    away = match["away_team_title"] or match["away_team_name"] or ""
-
-    home_score = match["home_score"]
-    away_score = match["away_score"]
-
-    score = ""
-
-    if home_score is not None and away_score is not None:
-        score = f"{home_score}-{away_score}"
-
-    block = build_backup_block(
-        match,
-        game_id,
-        period,
-        filename,
-        sha256,
-    )
-
-    return f"""Youth soccer match video backup.
-
-Match Date: {match["match_date"] or ""}
-Home: {home}
-Away: {away}
-Score: {score}
-Period: {period}
-Competition: {match["division_title"] or ""}
-Trace Game ID: {game_id}
-
-Original Filename: {filename}
-SHA256: {sha256}
-
-Source: Trace
-
-{block}
-"""
-
-
-def build_tags(match, game_id, period):
-    tags = [
-        "soccer",
-        "youth soccer",
-        "MLS NEXT",
-        "MLS Next U15",
-        "U15",
-        period,
-        str(game_id),
-    ]
-
-    for key in [
-        "home_team_title",
-        "home_team_abbr",
-        "away_team_title",
-        "away_team_abbr",
-        "division_title",
-        "match_date",
-    ]:
-        value = match[key]
-
-        if value:
-            tags.append(str(value))
-
-    # YouTube tag limit is 500 characters.
-    result = []
-
-    total = 0
-
-    for tag in tags:
-        if tag in result:
-            continue
-
-        add = len(tag) + (1 if result else 0)
-
-        if total + add > 500:
-            break
-
-        result.append(tag)
-        total += add
-
-    return result
 
 
 # ============================================================
@@ -412,32 +300,35 @@ def youtube_video_info(session, video_id):
 
 def extract_backup_metadata(description):
     """
-    Extract our machine-readable metadata block.
+    Parse the human-readable Soccer Video Backup metadata.
     """
 
     if not description:
         return {}
 
-    match = re.search(
-        r"\[SOCCER_BACKUP\](.*?)\[/SOCCER_BACKUP\]",
-        description,
-        re.DOTALL,
-    )
-
-    if not match:
-        return {}
-
     result = {}
 
-    for line in match.group(1).splitlines():
+    patterns = {
+        "game_id": r"^Game:\s*(.+)$",
+        "match_date": r"^Date:\s*(.+)$",
+        "match": r"^Match:\s*(.+)$",
+        "score": r"^Score:\s*(.+)$",
+        "period": r"^Period:\s*(.+)$",
+        "competition": r"^Competition:\s*(.+)$",
+        "original_filename": r"^File:\s*(.+)$",
+        "sha256": r"^SHA256:\s*([a-fA-F0-9]{64})$",
+        "source": r"^Source:\s*(.+)$",
+    }
+
+    for line in description.splitlines():
         line = line.strip()
 
-        if "=" not in line:
-            continue
+        for key, pattern in patterns.items():
+            match = re.match(pattern, line)
 
-        key, value = line.split("=", 1)
-
-        result[key.strip()] = value.strip()
+            if match:
+                result[key] = match.group(1).strip()
+                break
 
     return result
 

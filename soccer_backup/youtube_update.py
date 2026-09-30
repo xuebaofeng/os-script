@@ -8,13 +8,20 @@ from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
+from youtube_metadata import (
+    build_title,
+    build_description,
+    build_tags,
+)
+
 
 DB_FILE = "soccer_backup.db"
 CLIENT_SECRET_FILE = "client_secret.json"
 TOKEN_FILE = "token.json"
 
 SCOPES = [
-    "https://www.googleapis.com/auth/youtube.upload"
+    "https://www.googleapis.com/auth/youtube.upload",
+    "https://www.googleapis.com/auth/youtube"
 ]
 
 
@@ -68,138 +75,6 @@ def team_display(title, abbr):
     return title or abbr or ""
 
 
-def build_title(match, video):
-    home = team_display(
-        match["home_team_title"],
-        match["home_team_abbr"]
-    )
-
-    away = team_display(
-        match["away_team_title"],
-        match["away_team_abbr"]
-    )
-
-    date = format_date(match["full_date"])
-
-    score = ""
-
-    if (
-            match["home_score"] is not None
-            and match["away_score"] is not None
-    ):
-        score = (
-            f"{match['home_score']}-"
-            f"{match['away_score']}"
-        )
-
-    parts = [
-        home,
-        "vs",
-        away
-    ]
-
-    if date:
-        parts.append(date)
-
-    if score:
-        parts.append(score)
-
-    if video["period"]:
-        parts.append(video["period"])
-
-    return " | ".join(parts)
-
-
-def build_description(match, video):
-    home = team_display(
-        match["home_team_title"],
-        match["home_team_abbr"]
-    )
-
-    away = team_display(
-        match["away_team_title"],
-        match["away_team_abbr"]
-    )
-
-    date = format_date(match["full_date"])
-
-    division = match["division_title"] or ""
-
-    score = ""
-
-    if (
-            match["home_score"] is not None
-            and match["away_score"] is not None
-    ):
-        score = (
-            f"{match['home_score']}-"
-            f"{match['away_score']}"
-        )
-
-    lines = [
-        "Youth Soccer Match Video",
-        "",
-        f"Match Date: {date}",
-        f"Match: {home} vs {away}",
-    ]
-
-    if score:
-        lines.append(
-            f"Score: {score}"
-        )
-
-    if video["period"]:
-        lines.append(
-            f"Period: {video['period']}"
-        )
-
-    if division:
-        lines.append(
-            f"Competition: {division}"
-        )
-
-    lines.extend([
-        "",
-        f"Trace Game ID: {match['game_id']}",
-        "Source: Trace",
-        "",
-        "This video is archived for personal "
-        "soccer video backup and analysis."
-    ])
-
-    return "\n".join(lines)
-
-
-def build_tags(match, video):
-    tags = []
-
-    def add(value):
-        if value and value not in tags:
-            tags.append(value)
-
-    add(match["home_team_title"])
-    add(match["home_team_abbr"])
-
-    add(match["away_team_title"])
-    add(match["away_team_abbr"])
-
-    add(match["division_title"])
-
-    add("soccer")
-    add("youth soccer")
-    add("MLS NEXT")
-    add("MLS Next U15")
-    add("U15")
-
-    date = format_date(match["full_date"])
-
-    add(date)
-
-    if video["period"]:
-        add(video["period"])
-
-    return tags
-
 
 def load_videos(conn, game_id=None, video_id=None):
     query = """
@@ -209,9 +84,11 @@ def load_videos(conn, game_id=None, video_id=None):
                 v.original_filename,
                 v.original_path,
                 v.period,
+                v.sha256,
                 v.youtube_id,
 
                 m.full_date,
+                m.match_date,
                 m.division_title,
 
                 m.home_team_title,
@@ -234,18 +111,19 @@ def load_videos(conn, game_id=None, video_id=None):
     params = []
 
     if game_id is not None:
-        query += " AND v.game_id = ?"
+        query += """
+          AND v.game_id = ?
+        """
         params.append(game_id)
 
     if video_id is not None:
-        query += " AND v.id = ?"
+        query += """
+          AND v.id = ?
+        """
         params.append(video_id)
 
     query += """
-        ORDER BY
-            m.full_date,
-            v.game_id,
-            v.period
+        ORDER BY v.period
     """
 
     return conn.execute(
@@ -253,27 +131,6 @@ def load_videos(conn, game_id=None, video_id=None):
         params
     ).fetchall()
 
-
-def row_to_dict(row):
-    return {
-        "id": row[0],
-        "game_id": row[1],
-        "original_filename": row[2],
-        "original_path": row[3],
-        "period": row[4],
-        "youtube_id": row[5],
-
-        "full_date": row[6],
-        "division_title": row[7],
-
-        "home_team_title": row[8],
-        "home_team_abbr": row[9],
-        "home_score": row[10],
-
-        "away_team_title": row[11],
-        "away_team_abbr": row[12],
-        "away_score": row[13],
-    }
 
 
 def get_current_video(youtube, youtube_id):
@@ -405,6 +262,7 @@ def main():
         )
 
     conn = sqlite3.connect(args.db)
+    conn.row_factory = sqlite3.Row
 
     try:
         rows = load_videos(
@@ -412,6 +270,8 @@ def main():
             game_id=args.game_id,
             video_id=args.video_id
         )
+
+        print("DEBUG columns:", rows[0].keys() if rows else "NO ROWS")
 
         if not rows:
             print(
@@ -425,66 +285,71 @@ def main():
             youtube = get_youtube()
 
         for row in rows:
-            video = row_to_dict(row)
 
             match = {
-                "game_id": video["game_id"],
-                "full_date": video["full_date"],
+                "game_id": row["game_id"],
+                "full_date": row["full_date"],
                 "division_title":
-                    video["division_title"],
+                    row["division_title"],
 
                 "home_team_title":
-                    video["home_team_title"],
+                    row["home_team_title"],
 
                 "home_team_abbr":
-                    video["home_team_abbr"],
+                    row["home_team_abbr"],
 
                 "home_score":
-                    video["home_score"],
+                    row["home_score"],
 
                 "away_team_title":
-                    video["away_team_title"],
+                    row["away_team_title"],
 
                 "away_team_abbr":
-                    video["away_team_abbr"],
+                    row["away_team_abbr"],
 
                 "away_score":
-                    video["away_score"],
+                    row["away_score"],
+                "sha256": row["sha256"],
             }
 
             title = build_title(
                 match,
-                video
+                row["period"]
             )
+
 
             description = build_description(
                 match,
-                video
+                row["game_id"],
+                row["period"],
+                row["original_filename"],
+                row["sha256"],
             )
 
             tags = build_tags(
                 match,
-                video
+                row["game_id"],
+                row["period"],
             )
 
             print()
             print("=" * 70)
 
             print(
-                f"SQLite video : {video['id']}"
+                f"SQLite video : {row['id']}"
             )
 
             print(
-                f"Game ID      : {video['game_id']}"
+                f"Game ID      : {row['game_id']}"
             )
 
             print(
-                f"YouTube ID   : {video['youtube_id']}"
+                f"YouTube ID   : {row['youtube_id']}"
             )
 
             print(
                 f"File         : "
-                f"{video['original_filename']}"
+                f"{row['original_filename']}"
             )
 
             print()
@@ -512,7 +377,7 @@ def main():
 
             success = update_video(
                 youtube,
-                video["youtube_id"],
+                row["youtube_id"],
                 title,
                 description,
                 tags
