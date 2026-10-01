@@ -20,14 +20,19 @@ DB_FILE = "soccer_backup.db"
 CLIENT_SECRET_FILE = "client_secret.json"
 TOKEN_FILE = "token.json"
 
+# Needed for upload + playlist management
 SCOPES = [
-    "https://www.googleapis.com/auth/youtube.upload"
+    "https://www.googleapis.com/auth/youtube"
 ]
 
 UPLOAD_URL = (
     "https://www.googleapis.com/upload/youtube/v3/videos"
     "?uploadType=resumable"
     "&part=snippet,status"
+)
+
+PLAYLIST_ITEMS_URL = (
+    "https://www.googleapis.com/youtube/v3/playlistItems"
 )
 
 CHUNK_SIZE = 8 * 1024 * 1024
@@ -76,6 +81,10 @@ def init_db(conn):
                                                                youtube_id TEXT,
                                                                youtube_status TEXT DEFAULT 'pending',
 
+                                                               playlist_id TEXT,
+                                                               playlist_status TEXT DEFAULT 'pending',
+                                                               playlist_item_id TEXT,
+
                                                                upload_session_url TEXT,
                                                                uploaded_bytes INTEGER DEFAULT 0,
 
@@ -86,6 +95,35 @@ def init_db(conn):
                                                                updated_at TEXT NOT NULL
                  )
                  """)
+
+    # --------------------------------------------------------
+    # Upgrade older database versions
+    # --------------------------------------------------------
+
+    columns = {
+        row[1]
+        for row in conn.execute(
+            "PRAGMA table_info(generic_videos)"
+        ).fetchall()
+    }
+
+    if "playlist_id" not in columns:
+        conn.execute("""
+                     ALTER TABLE generic_videos
+                         ADD COLUMN playlist_id TEXT
+                     """)
+
+    if "playlist_status" not in columns:
+        conn.execute("""
+                     ALTER TABLE generic_videos
+                         ADD COLUMN playlist_status TEXT DEFAULT 'pending'
+                     """)
+
+    if "playlist_item_id" not in columns:
+        conn.execute("""
+                     ALTER TABLE generic_videos
+                         ADD COLUMN playlist_item_id TEXT
+                     """)
 
     conn.commit()
 
@@ -119,9 +157,7 @@ def find_video_files(folder):
     files = []
 
     for root, dirs, filenames in os.walk(folder):
-
         for filename in filenames:
-
             ext = os.path.splitext(filename)[1].lower()
 
             if ext in VIDEO_EXTENSIONS:
@@ -146,6 +182,10 @@ def get_by_sha256(conn, sha256):
                         """, (sha256,)).fetchone()
 
 
+# ============================================================
+# Insert / get video
+# ============================================================
+
 def insert_or_get_file(
         conn,
         path,
@@ -155,7 +195,10 @@ def insert_or_get_file(
     filename = os.path.basename(path)
     timestamp = now_utc()
 
-    row = get_by_sha256(conn, sha256)
+    row = get_by_sha256(
+        conn,
+        sha256
+    )
 
     if row:
         return row
@@ -167,10 +210,16 @@ def insert_or_get_file(
                      file_size,
                      sha256,
                      youtube_status,
+                     playlist_status,
                      created_at,
                      updated_at
                  )
-                 VALUES (?, ?, ?, ?, 'pending', ?, ?)
+                 VALUES (
+                            ?, ?, ?, ?,
+                            'pending',
+                            'pending',
+                            ?, ?
+                        )
                  """, (
                      filename,
                      path,
@@ -182,12 +231,26 @@ def insert_or_get_file(
 
     conn.commit()
 
-    return get_by_sha256(conn, sha256)
+    return get_by_sha256(
+        conn,
+        sha256
+    )
 
 
 # ============================================================
 # OAuth
 # ============================================================
+
+def save_credentials(creds):
+    with open(
+            TOKEN_FILE,
+            "w",
+            encoding="utf-8"
+    ) as token:
+        token.write(
+            creds.to_json()
+        )
+
 
 def get_credentials():
     creds = None
@@ -198,14 +261,36 @@ def get_credentials():
             SCOPES
         )
 
-    if creds and creds.expired and creds.refresh_token:
-        print("Refreshing YouTube credentials...")
-        creds.refresh(Request())
+    # --------------------------------------------------------
+    # Refresh existing token
+    # --------------------------------------------------------
+
+    if (
+            creds
+            and creds.expired
+            and creds.refresh_token
+    ):
+        print(
+            "Refreshing YouTube credentials..."
+        )
+
+        creds.refresh(
+            Request()
+        )
+
+        save_credentials(
+            creds
+        )
+
+    # --------------------------------------------------------
+    # New authorization
+    # --------------------------------------------------------
 
     if not creds or not creds.valid:
-
         print()
-        print("YouTube authorization required.")
+        print(
+            "YouTube authorization required."
+        )
         print()
 
         flow = InstalledAppFlow.from_client_secrets_file(
@@ -217,10 +302,39 @@ def get_credentials():
             port=0
         )
 
-        with open(TOKEN_FILE, "w") as token:
-            token.write(creds.to_json())
+        save_credentials(
+            creds
+        )
 
     return creds
+
+
+def ensure_credentials(creds):
+    if creds.valid:
+        return
+
+    if (
+            creds.expired
+            and creds.refresh_token
+    ):
+        print(
+            "Refreshing YouTube access token..."
+        )
+
+        creds.refresh(
+            Request()
+        )
+
+        save_credentials(
+            creds
+        )
+
+        return
+
+    raise RuntimeError(
+        "YouTube credentials are invalid "
+        "and cannot be refreshed."
+    )
 
 
 # ============================================================
@@ -228,17 +342,18 @@ def get_credentials():
 # ============================================================
 
 def build_title(filename):
-    # YouTube title = original filename
     return filename
 
 
-def build_description(filename, sha256, source):
+def build_description(
+        original_path,
+        sha256
+):
     return (
         "Video Backup\n"
         "\n"
-        f"File: {filename}\n"
+        f"Original Path: {original_path}\n"
         f"SHA256: {sha256}\n"
-        f"Source: {source}\n"
     )
 
 
@@ -249,22 +364,23 @@ def build_description(filename, sha256, source):
 def create_upload_session(
         creds,
         filename,
+        original_path,
         sha256,
-        source,
         file_size
 ):
-    title = build_title(filename)
-
-    description = build_description(
-        filename,
-        sha256,
-        source
+    ensure_credentials(
+        creds
     )
 
     body = {
         "snippet": {
-            "title": title,
-            "description": description,
+            "title": build_title(
+                filename
+            ),
+            "description": build_description(
+                original_path,
+                sha256
+            ),
             "categoryId": "17",
         },
         "status": {
@@ -273,10 +389,18 @@ def create_upload_session(
     }
 
     headers = {
-        "Authorization": f"Bearer {creds.token}",
-        "Content-Type": "application/json",
-        "X-Upload-Content-Length": str(file_size),
-        "X-Upload-Content-Type": "video/*",
+        "Authorization": (
+            f"Bearer {creds.token}"
+        ),
+        "Content-Type": (
+            "application/json"
+        ),
+        "X-Upload-Content-Length": (
+            str(file_size)
+        ),
+        "X-Upload-Content-Type": (
+            "video/*"
+        ),
     }
 
     response = requests.post(
@@ -286,8 +410,39 @@ def create_upload_session(
         timeout=60
     )
 
-    if response.status_code not in (200, 201):
+    # --------------------------------------------------------
+    # Retry once after token refresh
+    # --------------------------------------------------------
 
+    if response.status_code == 401:
+        print(
+            "Upload session returned 401."
+        )
+
+        if creds.refresh_token:
+            creds.refresh(
+                Request()
+            )
+
+            save_credentials(
+                creds
+            )
+
+            headers["Authorization"] = (
+                f"Bearer {creds.token}"
+            )
+
+            response = requests.post(
+                UPLOAD_URL,
+                headers=headers,
+                json=body,
+                timeout=60
+            )
+
+    if response.status_code not in (
+            200,
+            201
+    ):
         try:
             error_data = response.json()
         except Exception:
@@ -308,7 +463,6 @@ def create_upload_session(
             )
 
         if reason == "uploadLimitExceeded":
-
             raise YouTubeUploadLimitExceeded(
                 "YouTube upload limit exceeded."
             )
@@ -333,41 +487,48 @@ def create_upload_session(
 
 
 # ============================================================
-# Upload resumable file
+# Upload one file
 # ============================================================
 
 def upload_file(
         conn,
         row,
-        creds,
-        source
+        creds
 ):
     path = row["original_path"]
     filename = row["original_filename"]
     sha256 = row["sha256"]
     file_size = row["file_size"]
 
-    session_url = row["upload_session_url"]
-    uploaded_bytes = row["uploaded_bytes"] or 0
+    session_url = (
+        row["upload_session_url"]
+    )
+
+    uploaded_bytes = (
+            row["uploaded_bytes"]
+            or 0
+    )
 
     # --------------------------------------------------------
-    # Create upload session if necessary
+    # Create upload session
     # --------------------------------------------------------
 
     if not session_url:
-
         print()
         print(
-            "Creating YouTube resumable upload session..."
+            "Creating YouTube "
+            "resumable upload session..."
         )
 
         session_url = create_upload_session(
             creds,
             filename,
+            path,
             sha256,
-            source,
             file_size
         )
+
+        timestamp = now_utc()
 
         conn.execute("""
                      UPDATE generic_videos
@@ -379,8 +540,8 @@ def upload_file(
                      WHERE id = ?
                      """, (
                          session_url,
-                         now_utc(),
-                         now_utc(),
+                         timestamp,
+                         timestamp,
                          row["id"]
                      ))
 
@@ -393,24 +554,39 @@ def upload_file(
     # --------------------------------------------------------
 
     print()
-    print(f"Uploading: {filename}")
-    print(f"Size: {file_size:,} bytes")
-    print(f"Already uploaded: {uploaded_bytes:,} bytes")
+    print(
+        f"Uploading: {filename}"
+    )
+    print(
+        f"Size: {file_size:,} bytes"
+    )
+    print(
+        f"Already uploaded: "
+        f"{uploaded_bytes:,} bytes"
+    )
     print()
 
-    with open(path, "rb") as f:
+    with open(
+            path,
+            "rb"
+    ) as f:
 
         if uploaded_bytes:
-            f.seek(uploaded_bytes)
+            f.seek(
+                uploaded_bytes
+            )
 
         while uploaded_bytes < file_size:
 
-            chunk = f.read(CHUNK_SIZE)
+            chunk = f.read(
+                CHUNK_SIZE
+            )
 
             if not chunk:
                 break
 
             chunk_start = uploaded_bytes
+
             chunk_end = (
                     uploaded_bytes
                     + len(chunk)
@@ -418,7 +594,9 @@ def upload_file(
             )
 
             headers = {
-                "Content-Length": str(len(chunk)),
+                "Content-Length": (
+                    str(len(chunk))
+                ),
                 "Content-Range": (
                     f"bytes "
                     f"{chunk_start}-"
@@ -435,17 +613,18 @@ def upload_file(
             )
 
             # ------------------------------------------------
-            # Upload completed
+            # Upload complete
             # ------------------------------------------------
 
             if response.status_code in (
                     200,
                     201
             ):
-
                 data = response.json()
 
                 youtube_id = data["id"]
+
+                timestamp = now_utc()
 
                 conn.execute("""
                              UPDATE generic_videos
@@ -460,7 +639,7 @@ def upload_file(
                              """, (
                                  youtube_id,
                                  file_size,
-                                 now_utc(),
+                                 timestamp,
                                  row["id"]
                              ))
 
@@ -478,32 +657,32 @@ def upload_file(
                 return youtube_id
 
             # ------------------------------------------------
-            # Chunk accepted but upload not complete
+            # Chunk accepted, continue
             # ------------------------------------------------
 
             if response.status_code == 308:
 
-                range_header = response.headers.get(
-                    "Range"
+                range_header = (
+                    response.headers.get(
+                        "Range"
+                    )
                 )
 
                 if range_header:
-
-                    # Example:
-                    # Range: bytes=0-8388607
-
                     last_byte = int(
-                        range_header.split("-")[-1]
+                        range_header
+                        .split("-")[-1]
                     )
 
                     uploaded_bytes = (
                             last_byte + 1
                     )
-
                 else:
                     uploaded_bytes = (
                             chunk_end + 1
                     )
+
+                timestamp = now_utc()
 
                 conn.execute("""
                              UPDATE generic_videos
@@ -514,8 +693,8 @@ def upload_file(
                              WHERE id = ?
                              """, (
                                  uploaded_bytes,
-                                 now_utc(),
-                                 now_utc(),
+                                 timestamp,
+                                 timestamp,
                                  row["id"]
                              ))
 
@@ -539,13 +718,14 @@ def upload_file(
                 continue
 
             # ------------------------------------------------
-            # Upload session expired / invalid
+            # Session expired
             # ------------------------------------------------
 
             if response.status_code in (
                     404,
                     410
             ):
+                timestamp = now_utc()
 
                 conn.execute("""
                              UPDATE generic_videos
@@ -555,19 +735,29 @@ def upload_file(
                                  updated_at = ?
                              WHERE id = ?
                              """, (
-                                 now_utc(),
+                                 timestamp,
                                  row["id"]
                              ))
 
                 conn.commit()
 
                 raise RuntimeError(
-                    "YouTube upload session expired "
-                    "or is no longer valid."
+                    "YouTube upload session "
+                    "expired or is no longer valid."
                 )
 
             # ------------------------------------------------
-            # Other errors
+            # Authentication error
+            # ------------------------------------------------
+
+            if response.status_code == 401:
+                raise RuntimeError(
+                    "YouTube returned 401 "
+                    "during resumable upload."
+                )
+
+            # ------------------------------------------------
+            # Other error
             # ------------------------------------------------
 
             raise RuntimeError(
@@ -577,193 +767,597 @@ def upload_file(
             )
 
     raise RuntimeError(
-        "Upload ended before YouTube returned "
-        "a completed video ID."
+        "Upload ended before YouTube "
+        "returned a completed video ID."
     )
 
 
 # ============================================================
-# Process one file
+# Add video to playlist
 # ============================================================
 
-def process_file(
-        conn,
+def add_to_playlist(
         creds,
-        path,
-        source
+        playlist_id,
+        youtube_id
 ):
-    filename = os.path.basename(path)
+    ensure_credentials(
+        creds
+    )
+
+    headers = {
+        "Authorization": (
+            f"Bearer {creds.token}"
+        ),
+        "Content-Type": (
+            "application/json"
+        ),
+    }
+
+    body = {
+        "snippet": {
+            "playlistId": playlist_id,
+            "resourceId": {
+                "kind": "youtube#video",
+                "videoId": youtube_id,
+            },
+        }
+    }
+
+    response = requests.post(
+        PLAYLIST_ITEMS_URL,
+        params={
+            "part": "snippet"
+        },
+        headers=headers,
+        json=body,
+        timeout=60
+    )
+
+    # --------------------------------------------------------
+    # Retry once after token refresh
+    # --------------------------------------------------------
+
+    if response.status_code == 401:
+
+        print(
+            "Playlist request returned 401. "
+            "Refreshing token..."
+        )
+
+        if creds.refresh_token:
+
+            creds.refresh(
+                Request()
+            )
+
+            save_credentials(
+                creds
+            )
+
+            headers["Authorization"] = (
+                f"Bearer {creds.token}"
+            )
+
+            response = requests.post(
+                PLAYLIST_ITEMS_URL,
+                params={
+                    "part": "snippet"
+                },
+                headers=headers,
+                json=body,
+                timeout=60
+            )
+
+    if response.status_code not in (
+            200,
+            201
+    ):
+        raise RuntimeError(
+            "Add to playlist failed: "
+            f"{response.status_code} "
+            f"{response.text}"
+        )
+
+    data = response.json()
+
+    return data["id"]
+
+
+# ============================================================
+# Process one playlist item
+# ============================================================
+
+def process_playlist_video(
+        conn,
+        row,
+        creds,
+        playlist_id
+):
+    youtube_id = row["youtube_id"]
+
+    if not youtube_id:
+        return "skipped"
+
+    # --------------------------------------------------------
+    # Already completed for this playlist
+    # --------------------------------------------------------
+
+    if (
+            row["playlist_status"] == "completed"
+            and row["playlist_id"] == playlist_id
+    ):
+        return "already"
 
     print()
-    print("=" * 70)
-    print(filename)
-    print("=" * 70)
-
-    file_size = os.path.getsize(path)
-
-    sha256 = calculate_sha256(path)
-
-    print(f"SHA256: {sha256}")
-    print(f"Size:   {file_size:,}")
-
-    row = insert_or_get_file(
-        conn,
-        path,
-        sha256,
-        file_size
+    print(
+        f"Video: {row['original_filename']}"
+    )
+    print(
+        f"YouTube ID: {youtube_id}"
     )
 
-    # --------------------------------------------------------
-    # Already uploaded
-    # --------------------------------------------------------
+    try:
 
-    if row["youtube_status"] == "completed":
+        playlist_item_id = add_to_playlist(
+            creds,
+            playlist_id,
+            youtube_id
+        )
+
+        timestamp = now_utc()
+
+        conn.execute("""
+                     UPDATE generic_videos
+                     SET
+                         playlist_id = ?,
+                         playlist_status = 'completed',
+                         playlist_item_id = ?,
+                         error_message = NULL,
+                         updated_at = ?
+                     WHERE id = ?
+                     """, (
+                         playlist_id,
+                         playlist_item_id,
+                         timestamp,
+                         row["id"]
+                     ))
+
+        conn.commit()
+
+        print(
+            "  -> ADDED"
+        )
+
+        return "added"
+
+    except Exception as e:
+
+        timestamp = now_utc()
+
+        conn.execute("""
+                     UPDATE generic_videos
+                     SET
+                         playlist_id = ?,
+                         playlist_status = 'error',
+                         error_message = ?,
+                         updated_at = ?
+                     WHERE id = ?
+                     """, (
+                         playlist_id,
+                         str(e),
+                         timestamp,
+                         row["id"]
+                     ))
+
+        conn.commit()
+
+        print(
+            f"  -> ERROR: {e}"
+        )
+
+        return "error"
+
+
+# ============================================================
+# Scan command
+# ============================================================
+
+def command_scan(
+        conn,
+        folder
+):
+    files = find_video_files(
+        folder
+    )
+
+    print()
+    print(
+        f"Found {len(files)} video file(s)."
+    )
+    print()
+
+    inserted = 0
+    existing = 0
+
+    for index, path in enumerate(
+            files,
+            start=1
+    ):
+
+        print(
+            f"[{index}/{len(files)}] {path}"
+        )
+
+        file_size = os.path.getsize(
+            path
+        )
+
+        sha256 = calculate_sha256(
+            path
+        )
+
+        row = get_by_sha256(
+            conn,
+            sha256
+        )
+
+        if row:
+
+            existing += 1
+
+            print(
+                "  -> Already in database"
+            )
+
+        else:
+
+            insert_or_get_file(
+                conn,
+                path,
+                sha256,
+                file_size
+            )
+
+            inserted += 1
+
+            print(
+                "  -> Added"
+            )
+
+    print()
+    print(
+        "SCAN COMPLETE"
+    )
+    print(
+        f"New:      {inserted}"
+    )
+    print(
+        f"Existing: {existing}"
+    )
+
+
+# ============================================================
+# Upload command
+# ============================================================
+
+def command_upload(
+        conn,
+        folder
+):
+    files = find_video_files(
+        folder
+    )
+
+    print()
+    print(
+        f"Found {len(files)} video file(s)."
+    )
+
+    if not files:
+        return
+
+    creds = get_credentials()
+
+    for index, path in enumerate(
+            files,
+            start=1
+    ):
 
         print()
-        print("ALREADY UPLOADED")
+        print(
+            f"[{index}/{len(files)}]"
+        )
 
-        if row["youtube_id"]:
+        file_size = os.path.getsize(
+            path
+        )
+
+        sha256 = calculate_sha256(
+            path
+        )
+
+        row = insert_or_get_file(
+            conn,
+            path,
+            sha256,
+            file_size
+        )
+
+        # ----------------------------------------------------
+        # Already uploaded
+        # ----------------------------------------------------
+
+        if row["youtube_status"] == "completed":
+
+            print(
+                "ALREADY UPLOADED"
+            )
+
             print(
                 f"YouTube ID: "
                 f"{row['youtube_id']}"
             )
 
-        return True
+            continue
 
-    # --------------------------------------------------------
-    # Attempt upload
-    # --------------------------------------------------------
+        try:
 
-    try:
+            timestamp = now_utc()
 
-        conn.execute("""
-                     UPDATE generic_videos
-                     SET
-                         last_attempt_at = ?,
-                         updated_at = ?
-                     WHERE id = ?
-                     """, (
-                         now_utc(),
-                         now_utc(),
-                         row["id"]
-                     ))
+            conn.execute("""
+                         UPDATE generic_videos
+                         SET
+                             last_attempt_at = ?,
+                             updated_at = ?
+                         WHERE id = ?
+                         """, (
+                             timestamp,
+                             timestamp,
+                             row["id"]
+                         ))
 
-        conn.commit()
+            conn.commit()
 
-        upload_file(
+            upload_file(
+                conn,
+                row,
+                creds
+            )
+
+        except YouTubeUploadLimitExceeded:
+
+            print()
+            print(
+                "=" * 70
+            )
+            print(
+                "YOUTUBE UPLOAD LIMIT REACHED"
+            )
+            print(
+                "=" * 70
+            )
+
+            conn.execute("""
+                         UPDATE generic_videos
+                         SET
+                             youtube_status = 'blocked',
+                             error_message = ?,
+                             updated_at = ?
+                         WHERE id = ?
+                         """, (
+                             "uploadLimitExceeded",
+                             now_utc(),
+                             row["id"]
+                         ))
+
+            conn.commit()
+
+            print(
+                "Current file marked as blocked."
+            )
+            print(
+                "Batch stopped."
+            )
+
+            return
+
+        except KeyboardInterrupt:
+
+            print()
+            print(
+                "Upload interrupted."
+            )
+
+            conn.execute("""
+                         UPDATE generic_videos
+                         SET
+                             youtube_status = 'paused',
+                             updated_at = ?
+                         WHERE id = ?
+                         """, (
+                             now_utc(),
+                             row["id"]
+                         ))
+
+            conn.commit()
+
+            raise
+
+        except Exception as e:
+
+            print()
+            print(
+                f"ERROR: {e}"
+            )
+
+            conn.execute("""
+                         UPDATE generic_videos
+                         SET
+                             youtube_status = 'error',
+                             error_message = ?,
+                             updated_at = ?
+                         WHERE id = ?
+                         """, (
+                             str(e),
+                             now_utc(),
+                             row["id"]
+                         ))
+
+            conn.commit()
+
+    print()
+    print(
+        "=" * 70
+    )
+    print(
+        "UPLOAD BATCH FINISHED"
+    )
+    print(
+        "=" * 70
+    )
+
+
+# ============================================================
+# Playlist command
+# ============================================================
+
+def command_playlist(
+        conn,
+        playlist_id
+):
+    print()
+    print(
+        f"Playlist: {playlist_id}"
+    )
+    print()
+
+    rows = conn.execute("""
+                        SELECT *
+                        FROM generic_videos
+                        WHERE
+                            youtube_status = 'completed'
+                          AND youtube_id IS NOT NULL
+                        ORDER BY id
+                        """).fetchall()
+
+    if not rows:
+
+        print(
+            "No uploaded videos found."
+        )
+
+        return
+
+    creds = get_credentials()
+
+    total = len(rows)
+
+    added = 0
+    already = 0
+    errors = 0
+
+    print(
+        f"Found {total} uploaded video(s)."
+    )
+    print()
+
+    for index, row in enumerate(
+            rows,
+            start=1
+    ):
+
+        print(
+            f"[{index}/{total}]"
+        )
+
+        result = process_playlist_video(
             conn,
             row,
             creds,
-            source
+            playlist_id
         )
 
-        return True
+        if result == "added":
+            added += 1
 
-    # --------------------------------------------------------
-    # YouTube account upload limit
-    # --------------------------------------------------------
+        elif result == "already":
+            already += 1
 
-    except YouTubeUploadLimitExceeded:
+            print(
+                "  -> ALREADY IN PLAYLIST"
+            )
 
-        print()
-        print("=" * 70)
-        print("YOUTUBE UPLOAD LIMIT REACHED")
-        print("=" * 70)
-        print()
+        elif result == "error":
+            errors += 1
+
+    print()
+    print(
+        "=" * 70
+    )
+    print(
+        "PLAYLIST BATCH FINISHED"
+    )
+    print(
+        "=" * 70
+    )
+    print()
+    print(
+        f"Added:   {added}"
+    )
+    print(
+        f"Already: {already}"
+    )
+    print(
+        f"Errors:  {errors}"
+    )
+    print()
+
+
+# ============================================================
+# Status command
+# ============================================================
+
+def command_status(conn):
+
+    rows = conn.execute("""
+                        SELECT
+                            youtube_status,
+                            playlist_status,
+                            COUNT(*) AS count
+                        FROM generic_videos
+                        GROUP BY
+                            youtube_status,
+                            playlist_status
+                        ORDER BY
+                            youtube_status,
+                            playlist_status
+                        """).fetchall()
+
+    print()
+    print(
+        "=" * 70
+    )
+    print(
+        "DATABASE STATUS"
+    )
+    print(
+        "=" * 70
+    )
+    print()
+
+    for row in rows:
+
         print(
-            "YouTube has rejected the upload because "
-            "the account has reached its upload limit."
-        )
-        print()
-        print(
-            "This file has been marked as BLOCKED."
-        )
-        print(
-            "The entire batch will stop now."
-        )
-        print()
-        print(
-            "Run the same command again later."
-        )
-        print()
-
-        conn.execute("""
-                     UPDATE generic_videos
-                     SET
-                         youtube_status = 'blocked',
-                         error_message = ?,
-                         updated_at = ?
-                     WHERE id = ?
-                     """, (
-                         "uploadLimitExceeded",
-                         now_utc(),
-                         row["id"]
-                     ))
-
-        conn.commit()
-
-        return False
-
-    # --------------------------------------------------------
-    # Ctrl+C
-    # --------------------------------------------------------
-
-    except KeyboardInterrupt:
-
-        print()
-        print()
-        print(
-            "Upload interrupted."
-        )
-        print(
-            "The resumable upload state has been saved."
-        )
-        print(
-            "Run the same command again to resume."
+            f"YouTube: "
+            f"{row['youtube_status']:<12} "
+            f"Playlist: "
+            f"{row['playlist_status']:<12} "
+            f"Count: "
+            f"{row['count']}"
         )
 
-        conn.execute("""
-                     UPDATE generic_videos
-                     SET
-                         youtube_status = 'paused',
-                         updated_at = ?
-                     WHERE id = ?
-                     """, (
-                         now_utc(),
-                         row["id"]
-                     ))
-
-        conn.commit()
-
-        raise
-
-    # --------------------------------------------------------
-    # Other errors
-    # --------------------------------------------------------
-
-    except Exception as e:
-
-        print()
-        print(
-            f"ERROR: {e}"
-        )
-
-        conn.execute("""
-                     UPDATE generic_videos
-                     SET
-                         youtube_status = 'error',
-                         error_message = ?,
-                         updated_at = ?
-                     WHERE id = ?
-                     """, (
-                         str(e),
-                         now_utc(),
-                         row["id"]
-                     ))
-
-        conn.commit()
-
-        return True
+    print()
 
 
 # ============================================================
@@ -773,53 +1367,91 @@ def process_file(
 def main():
 
     parser = argparse.ArgumentParser(
-        description=(
-            "Recursively backup generic videos "
-            "to YouTube."
-        )
+        description="YouTube Soccer Video Backup"
     )
 
-    parser.add_argument(
+    subparsers = parser.add_subparsers(
+        dest="command",
+        required=True
+    )
+
+    # --------------------------------------------------------
+    # scan
+    # --------------------------------------------------------
+
+    scan_parser = subparsers.add_parser(
+        "scan",
+        help="Scan videos and update database"
+    )
+
+    scan_parser.add_argument(
         "--folder",
         required=True,
         help="Folder to scan recursively"
     )
 
-    parser.add_argument(
-        "--source",
-        default="mustang18",
-        help="Source name"
+    # --------------------------------------------------------
+    # upload
+    # --------------------------------------------------------
+
+    upload_parser = subparsers.add_parser(
+        "upload",
+        help="Upload videos to YouTube"
     )
 
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Calculate hashes only"
+    upload_parser.add_argument(
+        "--folder",
+        required=True,
+        help="Folder to scan recursively"
+    )
+
+    # --------------------------------------------------------
+    # playlist
+    # --------------------------------------------------------
+
+    playlist_parser = subparsers.add_parser(
+        "playlist",
+        help="Add uploaded videos to a playlist"
+    )
+
+    playlist_parser.add_argument(
+        "--playlist",
+        required=True,
+        help="YouTube Playlist ID"
+    )
+
+    # --------------------------------------------------------
+    # status
+    # --------------------------------------------------------
+
+    subparsers.add_parser(
+        "status",
+        help="Show database status"
     )
 
     args = parser.parse_args()
 
-    folder = os.path.abspath(
-        args.folder
-    )
+    # --------------------------------------------------------
+    # Validate folder
+    # --------------------------------------------------------
 
-    if not os.path.isdir(folder):
+    if args.command in (
+            "scan",
+            "upload"
+    ):
 
-        print(
-            f"ERROR: Folder does not exist: "
-            f"{folder}"
+        folder = os.path.abspath(
+            args.folder
         )
 
-        sys.exit(1)
+        if not os.path.isdir(folder):
 
-    print()
-    print("=" * 70)
-    print("Generic YouTube Backup")
-    print("=" * 70)
-    print()
-    print(f"Folder: {folder}")
-    print(f"Source: {args.source}")
-    print()
+            print(
+                f"ERROR: Folder does not exist: "
+                f"{folder}"
+            )
+
+            sys.exit(1)
 
     # --------------------------------------------------------
     # Database
@@ -833,132 +1465,77 @@ def main():
 
     init_db(conn)
 
-    # --------------------------------------------------------
-    # Find files
-    # --------------------------------------------------------
+    try:
 
-    files = find_video_files(
-        folder
-    )
+        if args.command == "scan":
 
-    print(
-        f"Found {len(files)} video file(s)."
-    )
-    print()
+            print()
+            print(
+                "=" * 70
+            )
+            print(
+                "SCAN"
+            )
+            print(
+                "=" * 70
+            )
+            print(
+                f"Folder: {folder}"
+            )
 
-    if not files:
+            command_scan(
+                conn,
+                folder
+            )
+
+        elif args.command == "upload":
+
+            print()
+            print(
+                "=" * 70
+            )
+            print(
+                "UPLOAD"
+            )
+            print(
+                "=" * 70
+            )
+            print(
+                f"Folder: {folder}"
+            )
+
+            command_upload(
+                conn,
+                folder
+            )
+
+        elif args.command == "playlist":
+
+            print()
+            print(
+                "=" * 70
+            )
+            print(
+                "PLAYLIST"
+            )
+            print(
+                "=" * 70
+            )
+
+            command_playlist(
+                conn,
+                args.playlist
+            )
+
+        elif args.command == "status":
+
+            command_status(
+                conn
+            )
+
+    finally:
+
         conn.close()
-        return
-
-    # --------------------------------------------------------
-    # Dry run
-    # --------------------------------------------------------
-
-    if args.dry_run:
-
-        print(
-            "DRY RUN - no database changes "
-            "and no uploads."
-        )
-        print()
-
-        for path in files:
-
-            file_size = os.path.getsize(
-                path
-            )
-
-            sha256 = calculate_sha256(
-                path
-            )
-
-            print()
-            print(
-                f"File:   {path}"
-            )
-            print(
-                f"Size:   {file_size:,}"
-            )
-            print(
-                f"SHA256: {sha256}"
-            )
-
-        conn.close()
-        return
-
-    # --------------------------------------------------------
-    # OAuth
-    # --------------------------------------------------------
-
-    creds = get_credentials()
-
-    # --------------------------------------------------------
-    # Process files
-    # --------------------------------------------------------
-
-    for index, path in enumerate(
-            files,
-            start=1
-    ):
-
-        print()
-        print(
-            f"[{index}/{len(files)}]"
-        )
-
-        result = process_file(
-            conn,
-            creds,
-            path,
-            args.source
-        )
-
-        # ----------------------------------------------------
-        # IMPORTANT:
-        # uploadLimitExceeded stops entire batch
-        # ----------------------------------------------------
-
-        if result is False:
-
-            print()
-            print("=" * 70)
-            print("BATCH STOPPED")
-            print("=" * 70)
-            print()
-            print(
-                "YouTube upload limit has been reached."
-            )
-            print()
-            print(
-                "Already completed files remain marked "
-                "as completed."
-            )
-            print(
-                "The current file is marked as blocked."
-            )
-            print(
-                "Remaining files were not attempted."
-            )
-            print()
-            print(
-                "Run the same command again later."
-            )
-            print()
-
-            conn.close()
-            return
-
-    # --------------------------------------------------------
-    # Finished
-    # --------------------------------------------------------
-
-    print()
-    print("=" * 70)
-    print("BACKUP FINISHED")
-    print("=" * 70)
-    print()
-
-    conn.close()
 
 
 if __name__ == "__main__":
