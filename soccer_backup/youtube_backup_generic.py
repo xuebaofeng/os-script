@@ -865,6 +865,405 @@ def add_to_playlist(
 
 
 # ============================================================
+# Get all playlist items
+# ============================================================
+
+def get_all_playlist_items(
+        creds,
+        playlist_id
+):
+    ensure_credentials(
+        creds
+    )
+
+    items = []
+    page_token = None
+
+    while True:
+
+        headers = {
+            "Authorization": (
+                f"Bearer {creds.token}"
+            )
+        }
+
+        params = {
+            "part": "snippet,contentDetails",
+            "playlistId": playlist_id,
+            "maxResults": 50,
+        }
+
+        if page_token:
+            params["pageToken"] = page_token
+
+        response = requests.get(
+            PLAYLIST_ITEMS_URL,
+            headers=headers,
+            params=params,
+            timeout=60
+        )
+
+        # ----------------------------------------------------
+        # Retry once after token refresh
+        # ----------------------------------------------------
+
+        if response.status_code == 401:
+
+            print(
+                "Playlist list request returned 401. "
+                "Refreshing token..."
+            )
+
+            if creds.refresh_token:
+
+                creds.refresh(
+                    Request()
+                )
+
+                save_credentials(
+                    creds
+                )
+
+                headers["Authorization"] = (
+                    f"Bearer {creds.token}"
+                )
+
+                response = requests.get(
+                    PLAYLIST_ITEMS_URL,
+                    headers=headers,
+                    params=params,
+                    timeout=60
+                )
+
+        if response.status_code != 200:
+
+            raise RuntimeError(
+                "Get playlist items failed: "
+                f"{response.status_code} "
+                f"{response.text}"
+            )
+
+        data = response.json()
+
+        for item in data.get("items", []):
+
+            video_id = (
+                item
+                .get("contentDetails", {})
+                .get("videoId")
+            )
+
+            if not video_id:
+                continue
+
+            items.append({
+                "playlist_item_id": item["id"],
+                "video_id": video_id,
+                "title": (
+                    item
+                    .get("snippet", {})
+                    .get("title", "")
+                ),
+                "position": (
+                    item
+                    .get("snippet", {})
+                    .get("position")
+                ),
+            })
+
+        page_token = data.get(
+            "nextPageToken"
+        )
+
+        if not page_token:
+            break
+
+    return items
+
+
+# ============================================================
+# Delete playlist item
+# ============================================================
+
+def delete_playlist_item(
+        creds,
+        playlist_item_id
+):
+    ensure_credentials(
+        creds
+    )
+
+    headers = {
+        "Authorization": (
+            f"Bearer {creds.token}"
+        )
+    }
+
+    response = requests.delete(
+        PLAYLIST_ITEMS_URL,
+        params={
+            "id": playlist_item_id
+        },
+        headers=headers,
+        timeout=60
+    )
+
+    # --------------------------------------------------------
+    # Retry once after token refresh
+    # --------------------------------------------------------
+
+    if response.status_code == 401:
+
+        print(
+            "Playlist delete request returned 401. "
+            "Refreshing token..."
+        )
+
+        if creds.refresh_token:
+
+            creds.refresh(
+                Request()
+            )
+
+            save_credentials(
+                creds
+            )
+
+            headers["Authorization"] = (
+                f"Bearer {creds.token}"
+            )
+
+            response = requests.delete(
+                PLAYLIST_ITEMS_URL,
+                params={
+                    "id": playlist_item_id
+                },
+                headers=headers,
+                timeout=60
+            )
+
+    if response.status_code != 204:
+
+        raise RuntimeError(
+            "Delete playlist item failed: "
+            f"{response.status_code} "
+            f"{response.text}"
+        )
+
+
+# ============================================================
+# Dedupe playlist
+# ============================================================
+
+def command_dedupe(
+        playlist_id,
+        dry_run=False
+):
+    print()
+    print(
+        f"Playlist: {playlist_id}"
+    )
+
+    if dry_run:
+        print(
+            "Mode: DRY RUN "
+            "(nothing will be deleted)"
+        )
+    else:
+        print(
+            "Mode: DELETE DUPLICATES"
+        )
+
+    print()
+
+    creds = get_credentials()
+
+    print(
+        "Reading playlist..."
+    )
+
+    items = get_all_playlist_items(
+        creds,
+        playlist_id
+    )
+
+    print()
+    print(
+        f"Total playlist items: {len(items)}"
+    )
+
+    if not items:
+        print(
+            "Playlist is empty."
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Find duplicates
+    #
+    # Keep the first occurrence.
+    # Delete every later occurrence.
+    # --------------------------------------------------------
+
+    seen = set()
+    duplicates = []
+
+    for item in items:
+
+        video_id = item["video_id"]
+
+        if video_id in seen:
+
+            duplicates.append(
+                item
+            )
+
+        else:
+
+            seen.add(
+                video_id
+            )
+
+    print(
+        f"Unique videos:        {len(seen)}"
+    )
+
+    print(
+        f"Duplicate items:      {len(duplicates)}"
+    )
+
+    print()
+
+    if not duplicates:
+
+        print(
+            "No duplicates found."
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Display duplicates
+    # --------------------------------------------------------
+
+    print(
+        "Duplicates:"
+    )
+
+    print()
+
+    for item in duplicates:
+
+        print(
+            f"  DELETE"
+            f"  Video ID: {item['video_id']}"
+        )
+
+        print(
+            f"          Title: "
+            f"{item['title']}"
+        )
+
+        print(
+            f"          Playlist item ID: "
+            f"{item['playlist_item_id']}"
+        )
+
+    print()
+
+    # --------------------------------------------------------
+    # Dry run
+    # --------------------------------------------------------
+
+    if dry_run:
+
+        print(
+            "DRY RUN COMPLETE"
+        )
+
+        print(
+            f"Would delete: "
+            f"{len(duplicates)} playlist item(s)."
+        )
+
+        return
+
+    # --------------------------------------------------------
+    # Delete duplicates
+    # --------------------------------------------------------
+
+    deleted = 0
+    errors = 0
+
+    print(
+        "Deleting duplicates..."
+    )
+
+    print()
+
+    for index, item in enumerate(
+            duplicates,
+            start=1
+    ):
+
+        print(
+            f"[{index}/{len(duplicates)}] "
+            f"{item['video_id']} "
+            f"{item['title']}"
+        )
+
+        try:
+
+            delete_playlist_item(
+                creds,
+                item["playlist_item_id"]
+            )
+
+            deleted += 1
+
+            print(
+                "  -> DELETED"
+            )
+
+        except Exception as e:
+
+            errors += 1
+
+            print(
+                f"  -> ERROR: {e}"
+            )
+
+    print()
+    print(
+        "=" * 70
+    )
+    print(
+        "PLAYLIST DEDUPE FINISHED"
+    )
+    print(
+        "=" * 70
+    )
+    print()
+    print(
+        f"Total items:       {len(items)}"
+    )
+    print(
+        f"Unique videos:     {len(seen)}"
+    )
+    print(
+        f"Duplicates found:  {len(duplicates)}"
+    )
+    print(
+        f"Deleted:           {deleted}"
+    )
+    print(
+        f"Errors:            {errors}"
+    )
+    print()
+
+
+# ============================================================
 # Process one playlist item
 # ============================================================
 
@@ -1421,6 +1820,27 @@ def main():
     )
 
     # --------------------------------------------------------
+    # dedupe
+    # --------------------------------------------------------
+
+    dedupe_parser = subparsers.add_parser(
+        "dedupe",
+        help="Remove duplicate videos from a playlist"
+    )
+
+    dedupe_parser.add_argument(
+        "--playlist",
+        required=True,
+        help="YouTube Playlist ID"
+    )
+
+    dedupe_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show duplicates without deleting them"
+    )
+
+    # --------------------------------------------------------
     # status
     # --------------------------------------------------------
 
@@ -1525,6 +1945,24 @@ def main():
             command_playlist(
                 conn,
                 args.playlist
+            )
+
+        elif args.command == "dedupe":
+
+            print()
+            print(
+                "=" * 70
+            )
+            print(
+                "PLAYLIST DEDUPE"
+            )
+            print(
+                "=" * 70
+            )
+
+            command_dedupe(
+                args.playlist,
+                args.dry_run
             )
 
         elif args.command == "status":
