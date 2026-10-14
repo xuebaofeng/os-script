@@ -269,7 +269,7 @@ def find_existing_youtube(youtube, digest, game_id, period):
         page=youtube.playlistItems().list(part="snippet,contentDetails",playlistId=playlist,maxResults=50,pageToken=token).execute()
         ids=[x.get("contentDetails",{}).get("videoId") for x in page.get("items",[]) if x.get("contentDetails",{}).get("videoId")]
         for i in range(0,len(ids),50):
-            details=youtube.videos().list(part="snippet,description",id=",".join(ids[i:i+50])).execute()
+            details=youtube.videos().list(part="snippet",id=",".join(ids[i:i+50])).execute()
             for v in details.get("items",[]):
                 desc=v.get("snippet",{}).get("description","")
                 if f"SOCCER_BACKUP_SHA256={digest}" in desc or (f"SOCCER_BACKUP_GAME_ID={game_id}" in desc and f"SOCCER_BACKUP_PERIOD={period}" in desc): return v["id"]
