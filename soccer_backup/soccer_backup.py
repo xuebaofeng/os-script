@@ -19,7 +19,7 @@ SCHEMA = """
          CREATE TABLE IF NOT EXISTS matches (
                                                 game_id INTEGER PRIMARY KEY, full_date TEXT, match_date TEXT, sport_type TEXT,
                                                 home_team TEXT, away_team TEXT, home_score INTEGER, away_score INTEGER,
-                                                division TEXT, raw_json TEXT, trace_json TEXT, updated_at TEXT
+                                                division TEXT, raw_json TEXT, trace_json TEXT, created_at TEXT, updated_at TEXT
          );
          CREATE TABLE IF NOT EXISTS videos (
                                                id INTEGER PRIMARY KEY AUTOINCREMENT, game_id INTEGER NOT NULL, period TEXT NOT NULL,
@@ -50,7 +50,7 @@ def init_db(conn):
     for name, typ in migrations.items():
         if name not in cols: conn.execute(f"ALTER TABLE videos ADD COLUMN {name} {typ}")
     mcols = {r[1] for r in conn.execute("PRAGMA table_info(matches)")}
-    for name, typ in {"home_team":"TEXT","away_team":"TEXT","home_score":"INTEGER","away_score":"INTEGER","division":"TEXT","raw_json":"TEXT","trace_json":"TEXT","updated_at":"TEXT"}.items():
+    for name, typ in {"full_date":"TEXT","match_date":"TEXT","sport_type":"TEXT","home_team":"TEXT","away_team":"TEXT","home_score":"INTEGER","away_score":"INTEGER","division":"TEXT","raw_json":"TEXT","trace_json":"TEXT","created_at":"TEXT","updated_at":"TEXT"}.items():
         if name not in mcols: conn.execute(f"ALTER TABLE matches ADD COLUMN {name} {typ}")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_sha256 ON videos(sha256)")
     conn.execute("CREATE INDEX IF NOT EXISTS idx_videos_youtube_id ON videos(youtube_video_id)")
@@ -122,9 +122,10 @@ def upsert_matches(conn, matches):
     for m in matches:
         # Older databases may have a NOT NULL trace_json column. Populate both JSON columns
         # so the script remains compatible with databases created by the earlier importer.
-        payload = {**m, "updated_at": now(), "trace_json": m.get("raw_json", "{}")}
-        conn.execute("""INSERT INTO matches(game_id,full_date,match_date,sport_type,home_team,away_team,home_score,away_score,division,raw_json,trace_json,updated_at)
-                        VALUES(:game_id,:full_date,:match_date,:sport_type,:home_team,:away_team,:home_score,:away_score,:division,:raw_json,:trace_json,:updated_at)
+        stamp = now()
+        payload = {**m, "created_at": stamp, "updated_at": stamp, "trace_json": m.get("raw_json", "{}")}
+        conn.execute("""INSERT INTO matches(game_id,full_date,match_date,sport_type,home_team,away_team,home_score,away_score,division,raw_json,trace_json,created_at,updated_at)
+                        VALUES(:game_id,:full_date,:match_date,:sport_type,:home_team,:away_team,:home_score,:away_score,:division,:raw_json,:trace_json,:created_at,:updated_at)
                             ON CONFLICT(game_id) DO UPDATE SET full_date=excluded.full_date,match_date=excluded.match_date,sport_type=excluded.sport_type,home_team=excluded.home_team,away_team=excluded.away_team,home_score=excluded.home_score,away_score=excluded.away_score,division=excluded.division,raw_json=excluded.raw_json,trace_json=excluded.trace_json,updated_at=excluded.updated_at""", payload)
     conn.commit()
 
@@ -293,4 +294,4 @@ def main():
 if __name__=="__main__":
     try: main()
     except KeyboardInterrupt: print("Interrupted.",file=sys.stderr); raise SystemExit(130)
-    except Exception as e: print(f"ERROR: {e}",file=sys.stderr); raise SystemExit(1)
+    except Exception as e: print(f"ERROR: {e}",file=sys.stderr); raise SystemExit(1) 
