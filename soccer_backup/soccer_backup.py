@@ -43,7 +43,7 @@ def init_db(conn):
     conn.executescript(SCHEMA)
     cols = {r[1] for r in conn.execute("PRAGMA table_info(videos)")}
     migrations = {
-        "filename":"TEXT", "full_path":"TEXT", "sha256":"TEXT", "size_bytes":"INTEGER", "youtube_video_id":"TEXT",
+        "filename":"TEXT", "original_filename":"TEXT", "full_path":"TEXT", "sha256":"TEXT", "size_bytes":"INTEGER", "youtube_video_id":"TEXT",
         "upload_status":"TEXT DEFAULT 'pending'", "upload_session_url":"TEXT", "uploaded_bytes":"INTEGER DEFAULT 0",
         "error_message":"TEXT", "last_attempt_at":"TEXT", "created_at":"TEXT", "updated_at":"TEXT"
     }
@@ -189,11 +189,53 @@ def upsert_video(conn,m,path,period,digest,size):
     old=conn.execute("SELECT * FROM videos WHERE game_id=? AND period=?",(m["game_id"],period)).fetchone()
     if old and old["sha256"] and old["sha256"] != digest:
         raise RuntimeError(f"DB already has a different file for game_id={m['game_id']} period={period}: {old['filename']}")
-    conn.execute("""INSERT INTO videos(game_id,period,filename,full_path,sha256,size_bytes,upload_status,created_at,updated_at)
-                    VALUES(?,?,?,?,?,?,'pending',?,?) ON CONFLICT(game_id,period) DO UPDATE SET filename=excluded.filename,full_path=excluded.full_path,sha256=excluded.sha256,size_bytes=excluded.size_bytes,updated_at=excluded.updated_at""",
-                 (m["game_id"],period,Path(path).name,p,digest,size,stamp,stamp))
+    if old:
+        # Legacy databases may not have UNIQUE(game_id, period), so avoid an
+        # ON CONFLICT clause that depends on that constraint.
+        video_cols = {r[1] for r in conn.execute("PRAGMA table_info(videos)")}
+        updates = {"filename": Path(path).name, "original_filename": Path(path).name,
+                   "full_path": p, "sha256": digest, "size_bytes": size,
+                   "upload_status": old["upload_status"] or "pending", "updated_at": stamp}
+        updates = {k: v for k, v in updates.items() if k in video_cols}
+        conn.execute("UPDATE videos SET " + ",".join(f"{k}=?" for k in updates) + " WHERE id=?",
+                     (*updates.values(), old["id"]))
+        video_id = old["id"]
+    else:
+        video_cols = {r[1] for r in conn.execute("PRAGMA table_info(videos)")}
+        filename = Path(path).name
+        record = {
+            "game_id": m["game_id"], "period": period, "filename": filename,
+            "original_filename": filename, "full_path": p, "sha256": digest,
+            "size_bytes": size, "upload_status": "pending", "uploaded_bytes": 0,
+            "created_at": stamp, "updated_at": stamp,
+            "trace_json": json.dumps({"game_id": m["game_id"], "period": period, "filename": filename}, ensure_ascii=False),
+            "error_message": None, "upload_session_url": None, "youtube_video_id": None,
+            "last_attempt_at": None,
+        }
+        # Satisfy legacy NOT NULL columns that have no SQL default, using sensible values
+        # where recognized and conservative type-appropriate values otherwise.
+        table_info = conn.execute("PRAGMA table_info(videos)").fetchall()
+        for col in table_info:
+            name, notnull, default = col[1], col[3], col[4]
+            if name in record or not notnull or default is not None or col[5]:
+                continue
+            lname = name.lower()
+            if "filename" in lname or lname.endswith("_path") or lname == "path": record[name] = p if "path" in lname else filename
+            elif "json" in lname: record[name] = record["trace_json"]
+            elif "date" in lname or "time" in lname or lname.endswith("_at"): record[name] = stamp
+            elif "status" in lname: record[name] = "pending"
+            elif "period" in lname: record[name] = period
+            elif "game" in lname and "id" in lname: record[name] = m["game_id"]
+            elif "size" in lname or "byte" in lname: record[name] = size
+            elif "hash" in lname or "sha" in lname: record[name] = digest
+            elif "error" in lname or "message" in lname or "session" in lname: record[name] = ""
+            else: record[name] = ""
+        fields = [name for name in record if name in video_cols]
+        placeholders = ",".join("?" for _ in fields)
+        conn.execute(f"INSERT INTO videos({','.join(fields)}) VALUES({placeholders})", [record[name] for name in fields])
+        video_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
     conn.commit()
-    return conn.execute("SELECT * FROM videos WHERE game_id=? AND period=?",(m["game_id"],period)).fetchone()
+    return conn.execute("SELECT * FROM videos WHERE id=?",(video_id,)).fetchone()
 
 def update_video(conn,vid,**kw):
     kw["updated_at"]=now(); sets=", ".join(f"{k}=?" for k in kw)
