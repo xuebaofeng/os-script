@@ -1623,27 +1623,76 @@ def command_upload(
 
 def command_playlist(
         conn,
+        folder,
         playlist_id
 ):
+    folder = os.path.abspath(
+        folder
+    )
+
     print()
+    print(
+        f"Folder:   {folder}"
+    )
     print(
         f"Playlist: {playlist_id}"
     )
     print()
 
-    rows = conn.execute("""
-                        SELECT *
-                        FROM generic_videos
-                        WHERE
-                            youtube_status = 'completed'
-                          AND youtube_id IS NOT NULL
-                        ORDER BY id
-                        """).fetchall()
+    # --------------------------------------------------------
+    # Get uploaded videos from this folder only.
+    #
+    # original_path can be either:
+    #
+    #   D:\Trace\Ballistic\2026-09-27\video.mov
+    #
+    # or a file inside a subdirectory:
+    #
+    #   D:\Trace\Ballistic\2026-09-27\period1\video.mov
+    #
+    # --------------------------------------------------------
+
+    all_rows = conn.execute("""
+                            SELECT *
+                            FROM generic_videos
+                            WHERE
+                                youtube_status = 'completed'
+                              AND youtube_id IS NOT NULL
+                            ORDER BY id
+                            """).fetchall()
+
+    rows = []
+
+    folder_normalized = os.path.normcase(
+        os.path.normpath(folder)
+    )
+
+    for row in all_rows:
+
+        original_path = os.path.abspath(
+            row["original_path"]
+        )
+
+        original_path_normalized = os.path.normcase(
+            os.path.normpath(original_path)
+        )
+
+        try:
+            common_path = os.path.commonpath([
+                folder_normalized,
+                original_path_normalized
+            ])
+        except ValueError:
+            # Different drives, for example C: and D:
+            continue
+
+        if common_path == folder_normalized:
+            rows.append(row)
 
     if not rows:
 
         print(
-            "No uploaded videos found."
+            "No uploaded videos found in this folder."
         )
 
         return
@@ -1657,7 +1706,8 @@ def command_playlist(
     errors = 0
 
     print(
-        f"Found {total} uploaded video(s)."
+        f"Found {total} uploaded video(s) "
+        f"in this folder."
     )
     print()
 
@@ -1701,6 +1751,9 @@ def command_playlist(
         "=" * 70
     )
     print()
+    print(
+        f"Folder:  {folder}"
+    )
     print(
         f"Added:   {added}"
     )
@@ -1810,7 +1863,13 @@ def main():
 
     playlist_parser = subparsers.add_parser(
         "playlist",
-        help="Add uploaded videos to a playlist"
+        help="Add uploaded videos from a folder to a playlist"
+    )
+
+    playlist_parser.add_argument(
+        "--path",
+        required=True,
+        help="Local folder to select videos from"
     )
 
     playlist_parser.add_argument(
@@ -1857,11 +1916,17 @@ def main():
 
     if args.command in (
             "scan",
-            "upload"
+            "upload",
+            "playlist"
     ):
 
+        if args.command == "playlist":
+            folder_arg = args.path
+        else:
+            folder_arg = args.folder
+
         folder = os.path.abspath(
-            args.folder
+            folder_arg
         )
 
         if not os.path.isdir(folder):
@@ -1944,6 +2009,7 @@ def main():
 
             command_playlist(
                 conn,
+                folder,
                 args.playlist
             )
 
