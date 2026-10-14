@@ -353,4 +353,4 @@ def main():
 if __name__=="__main__":
     try: main()
     except KeyboardInterrupt: print("Interrupted.",file=sys.stderr); raise SystemExit(130)
-    except Exception as e: print(f"ERROR: {e}",file=sys.stderr); raise SystemExit(1) 
+    except Exception as e: print(f"ERROR: {e}",file=sys.stderr); raise SystemExit(1)
