@@ -43,7 +43,7 @@ def init_db(conn):
     conn.executescript(SCHEMA)
     cols = {r[1] for r in conn.execute("PRAGMA table_info(videos)")}
     migrations = {
-        "full_path":"TEXT", "sha256":"TEXT", "size_bytes":"INTEGER", "youtube_video_id":"TEXT",
+        "filename":"TEXT", "full_path":"TEXT", "sha256":"TEXT", "size_bytes":"INTEGER", "youtube_video_id":"TEXT",
         "upload_status":"TEXT DEFAULT 'pending'", "upload_session_url":"TEXT", "uploaded_bytes":"INTEGER DEFAULT 0",
         "error_message":"TEXT", "last_attempt_at":"TEXT", "created_at":"TEXT", "updated_at":"TEXT"
     }
@@ -66,10 +66,12 @@ def extract_matches(data):
             if gid is not None and str(gid).isdigit():
                 home=first(x,"home_team","homeTeam","home_team_name","homeTeamName")
                 away=first(x,"away_team","awayTeam","away_team_name","awayTeamName")
+                if isinstance(home, dict): home=first(home,"title","name","team_name","teamTitle")
+                if isinstance(away, dict): away=first(away,"title","name","team_name","teamTitle")
                 teams=first(x,"teams","team_names","teamNames")
                 if isinstance(teams,list) and len(teams)>=2:
-                    home=home or first(teams[0] if isinstance(teams[0],dict) else {},"name","team_name") or (teams[0] if isinstance(teams[0],str) else None)
-                    away=away or first(teams[1] if isinstance(teams[1],dict) else {},"name","team_name") or (teams[1] if isinstance(teams[1],str) else None)
+                    home=home or first(teams[0] if isinstance(teams[0],dict) else {},"title","name","team_name","teamTitle") or (teams[0] if isinstance(teams[0],str) else None)
+                    away=away or first(teams[1] if isinstance(teams[1],dict) else {},"title","name","team_name","teamTitle") or (teams[1] if isinstance(teams[1],str) else None)
                 date=first(x,"full_date","fullDate","match_date","matchDate","date","start_time","startTime","kickoff")
                 score=first(x,"score","result")
                 hs=first(x,"home_score","homeScore","home_goals","homeGoals")
@@ -141,23 +143,38 @@ def sha256_file(path):
     return h.hexdigest()
 
 def match_candidates(matches, path):
-    # Directory/file names are evidence, not a substitute for explicit selection if ambiguous.
-    hints=norm(" ".join([Path(path).stem, *[p.name for p in list(Path(path).parents)[:3]]]))
-    scored=[]
+    """Match strictly by team names in path/filename; intentionally ignore all dates."""
+    p = Path(path)
+    # Include filename and parent directory names, but never use date strings as evidence.
+    path_parts = [p.stem, *[parent.name for parent in list(p.parents)[:4]]]
+    hints = norm(" ".join(path_parts))
+    generic = {"u", "u9", "u10", "u11", "u12", "u13", "u14", "u15", "u16", "u17", "u18",
+               "mls", "next", "ad", "academy", "division", "club", "soccer", "team", "tier",
+               "boys", "girls", "male", "female", "sc", "fc"}
+
+    def distinctive_tokens(team):
+        tokens = norm(team).split()
+        return [t for t in tokens if t not in generic and not t.isdigit() and len(t) > 2]
+
+    matched = []
     for m in matches:
-        home=norm(m["home_team"]); away=norm(m["away_team"])
-        score=0
-        if home and home in hints: score+=3
-        if away and away in hints: score+=3
-        # Use distinctive team-name tokens for filenames such as ALBION ... period-1.
-        for team in (home,away):
-            toks=[t for t in team.split() if len(t)>3 and t not in {"club","soccer","team","academy","division"}]
-            if toks and any(t in hints for t in toks): score+=1
-        if score: scored.append((score,m))
-    scored.sort(key=lambda z:(-z[0],z[1]["game_id"]))
-    if not scored: return []
-    top=scored[0][0]
-    return [m for s,m in scored if s==top]
+        teams = [m.get("home_team", ""), m.get("away_team", "")]
+        matched_team = False
+        for team in teams:
+            team_norm = norm(team)
+            tokens = distinctive_tokens(team)
+            # Prefer full normalized team-name matching. Otherwise require every distinctive
+            # token to occur in the path, preventing generic U15/MLS/BUS terms from matching.
+            if team_norm and team_norm in hints:
+                matched_team = True
+                break
+            if len(tokens) >= 1 and all(re.search(r"\b" + re.escape(t) + r"\b", hints) for t in tokens):
+                matched_team = True
+                break
+        if matched_team:
+            matched.append(m)
+    # Do not rank by dates or use dates as a tie-breaker: only a unique team-name match is safe.
+    return matched
 
 def display_match(m):
     score=f"{m.get('home_score') if m.get('home_score') is not None else '?'} - {m.get('away_score') if m.get('away_score') is not None else '?'}"
