@@ -1,3 +1,4 @@
+
 import os
 import re
 import time
@@ -31,7 +32,7 @@ ARTISTS_FILE = "all_local_artists_sorted.txt"
 
 OUTPUT_FILE = "tbd.txt"
 
-BAD_WORDS_FILE = "bad_words.txt"  # Optional legacy word list
+BAD_WORDS_FILE = "bad_words.txt"  # All filtering rules are kept in this file
 
 
 # Number of artists to process.
@@ -154,20 +155,42 @@ def normalize(text):
 
 
 def clean_song_name(text):
+    """Remove metadata/version suffixes for comparison.
 
-    text = re.sub(
-        r"\([^)]*\)",
-        "",
-        text
+    Examples:
+      All Out of Love - Remastered -> All Out of Love
+      Everybody - Radio Edit       -> Everybody
+      Song (2011 Remaster)         -> Song
+
+    This function is used for matching. Original scraped titles are retained
+    for output to tbd.txt.
+    """
+    text = str(text or "").strip()
+
+    # Remove bracketed annotations first.
+    text = re.sub(r"\([^)]*\)|\[[^]]*\]|\{[^}]*\}", " ", text)
+
+    # Remove common trailing release/version labels. Repeat to handle
+    # combinations such as "Song - Remastered - Radio Edit".
+    suffixes = [
+        r"radio\s+edit", r"single\s+edit", r"album\s+version",
+        r"single\s+version", r"radio\s+version", r"remaster(?:ed)?(?:\s+\d{4})?",
+        r"\d{4}\s+remaster", r"extended\s+(?:mix|version|edit)",
+        r"(?:original\s+)?(?:extended\s+)?mix", r"club\s+mix",
+        r"dance\s+mix", r"instrumental(?:\s+version)?", r"acoustic(?:\s+version)?",
+        r"karaoke(?:\s+version)?", r"explicit(?:\s+version)?",
+        r"clean(?:\s+version)?", r"mono", r"stereo"
+    ]
+    suffix_pattern = re.compile(
+        r"\s*(?:[-–—|:]\s*)?(?:" + "|".join(suffixes) + r")\s*$",
+        re.IGNORECASE
     )
+    previous = None
+    while text != previous:
+        previous = text
+        text = suffix_pattern.sub("", text).strip(" -–—|:")
 
-    text = re.sub(
-        r"\[[^\]]*\]",
-        "",
-        text
-    )
-
-    return text.strip()
+    return re.sub(r"\s+", " ", text).strip()
 
 
 # ============================================================
@@ -185,128 +208,79 @@ def is_english(text):
 
 
 # ============================================================
-# Bad words
+# Filtering rules: bad_words.txt ONLY
 # ============================================================
 
 def load_bad_words():
+    """Read all exclusion rules from bad_words.txt.
 
-    words = set()
-
-    if not os.path.exists(BAD_WORDS_FILE):
-
-        print(
-            f"Warning: {BAD_WORDS_FILE} not found"
-        )
-
-        return words
-
-    with open(
-            BAD_WORDS_FILE,
-            "r",
-            encoding="utf-8-sig"
-    ) as f:
-
-        for line in f:
-
-            word = line.strip()
-
-            if not word:
-                continue
-
-            if word.startswith("#"):
-                continue
-
-            words.add(
-                normalize(word)
-            )
-
-    return words
-
-
-def contains_bad_word(text, bad_words):
-
-    normalized = normalize(text)
-
-    for word in bad_words:
-
-        if not word:
-            continue
-
-        # Exact match or prefix match
-
-        if normalized == word:
-            return True
-
-        if normalized.startswith(word):
-            return True
-
-    return False
-
-
-# ============================================================
-# Mixed blacklist parser
-# ============================================================
-
-def load_blacklist(filename):
-    """Load three rule types from one file:
-
-    1. Artist rule:       Artist Name -
-    2. Keyword rule:      *word* (substring match against artist/song text)
-    3. Song rule:         Artist Name - Song Title
-
-    Matching ignores case, accents, punctuation and spacing.
+    Supported formats:
+      Artist Name -       block all songs by artist
+      *word*               substring keyword match against artist/song
+      Artist - Song        block one artist/song pair
+      - Song               block this song title for every artist
+      plain word           legacy bad-word filter (substring match)
     """
     blocked_artists = set()
     blocked_keywords = set()
     blocked_songs = set()
+    blocked_song_titles = set()
+    plain_words = set()
 
-    if not os.path.exists(filename):
-        print(f"Warning: {filename} not found; mixed blacklist is empty")
-        return blocked_artists, blocked_keywords, blocked_songs
+    if not os.path.exists(BAD_WORDS_FILE):
+        print(f"Warning: {BAD_WORDS_FILE} not found; no filtering rules loaded")
+        return blocked_artists, blocked_keywords, blocked_songs, blocked_song_titles, plain_words
 
-    with open(filename, "r", encoding="utf-8-sig") as f:
+    with open(BAD_WORDS_FILE, "r", encoding="utf-8-sig") as f:
         for raw_line in f:
             line = raw_line.strip()
             if not line or line.startswith("#") or line.startswith("```"):
                 continue
 
-            # Keyword wildcard rule, e.g. *Fuck*
             if len(line) >= 3 and line.startswith("*") and line.endswith("*"):
-                keyword = normalize(line[1:-1])
-                if keyword:
-                    blocked_keywords.add(keyword)
+                key = normalize(line[1:-1])
+                if key:
+                    blocked_keywords.add(key)
                 continue
 
-            # Artist-wide rule: trailing hyphen, e.g. Bad Bunny -
+            title_match = re.fullmatch(r"-\s+(.+?)\s*", line)
+            if title_match:
+                key = normalize(clean_song_name(title_match.group(1)))
+                if key:
+                    blocked_song_titles.add(key)
+                continue
+
             artist_match = re.fullmatch(r"(.+?)\s+-\s*", line)
             if artist_match:
-                artist_key = normalize(artist_match.group(1))
-                if artist_key:
-                    blocked_artists.add(artist_key)
+                key = normalize(artist_match.group(1))
+                if key:
+                    blocked_artists.add(key)
                 continue
 
-            # Specific song rule: Artist - Song
             parts = re.split(r"\s+-\s+", line, maxsplit=1)
             if len(parts) == 2:
-                artist_key = normalize(parts[0].strip())
-                song_key = normalize(clean_song_name(parts[1].strip()))
+                artist_key = normalize(parts[0])
+                song_key = normalize(clean_song_name(parts[1]))
                 if artist_key and song_key:
                     blocked_songs.add((artist_key, song_key))
-                else:
-                    print(f"  Ignored invalid blacklist line: {line}")
                 continue
 
-            print(f"  Ignored unrecognized blacklist line: {line}")
+            # Backward-compatible plain word rule.
+            key = normalize(line)
+            if key:
+                plain_words.add(key)
 
-    print("Mixed blacklist loaded:")
-    print(f"  Artists : {len(blocked_artists)}")
-    print(f"  Keywords: {len(blocked_keywords)}")
-    print(f"  Songs   : {len(blocked_songs)}")
-    return blocked_artists, blocked_keywords, blocked_songs
+    print(f"Filtering rules loaded from {BAD_WORDS_FILE}:")
+    print(f"  Artists       : {len(blocked_artists)}")
+    print(f"  Keywords      : {len(blocked_keywords)}")
+    print(f"  Artist + song : {len(blocked_songs)}")
+    print(f"  Song titles   : {len(blocked_song_titles)}")
+    print(f"  Plain words   : {len(plain_words)}")
+
+    return blocked_artists, blocked_keywords, blocked_songs, blocked_song_titles, plain_words
 
 
 def split_artist_credits(artist):
-    """Split common multi-artist credit formats for artist blacklist checks."""
     parts = re.split(
         r"\s*(?:,|;|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bx\b)\s*",
         artist,
@@ -315,31 +289,26 @@ def split_artist_credits(artist):
     return [normalize(part) for part in parts if normalize(part)]
 
 
-def blacklist_reason(artist, song, blacklist):
-    blocked_artists, blocked_keywords, blocked_songs = blacklist
+def blacklist_reason(artist, song, rules):
+    blocked_artists, blocked_keywords, blocked_songs, blocked_song_titles, plain_words = rules
     artist_key = normalize(artist)
     song_key = normalize(clean_song_name(song))
-
-    # Entire artist is excluded, including collaborations where that artist is credited.
     credits = set(split_artist_credits(artist))
     if artist_key:
         credits.add(artist_key)
-    matched_artist = credits.intersection(blocked_artists)
-    if matched_artist:
+
+    if credits.intersection(blocked_artists):
         return "artist"
 
-    # Wildcard keywords are substring rules; check both artist and title.
     combined_text = normalize(f"{artist} {song}")
-    if any(keyword in combined_text for keyword in blocked_keywords):
+    if any(word in combined_text for word in blocked_keywords):
         return "keyword"
-
-    # Specific song rules require both artist and title to match.
-    if artist_key and song_key and (artist_key, song_key) in blocked_songs:
-        return "song"
-
-    # Also check individual credited artists for a specific song rule.
+    if any(word in combined_text for word in plain_words):
+        return "bad word"
+    if song_key and song_key in blocked_song_titles:
+        return "song title"
     if song_key and any((credit, song_key) in blocked_songs for credit in credits):
-        return "song"
+        return "artist + song"
 
     return None
 
@@ -606,7 +575,7 @@ def song_exists(
 
     artist_key = normalize(artist)
 
-    song_key = normalize(song)
+    song_key = normalize(clean_song_name(song))
 
     if not artist_key or not song_key:
         return False
@@ -666,13 +635,7 @@ def main():
     # Load blacklist
     # --------------------------------------------------------
 
-    bad_words = load_bad_words()
-
-    print(
-        f"Bad words loaded: {len(bad_words)}"
-    )
-
-    mixed_blacklist = load_blacklist(BAD_WORDS_FILE)
+    filtering_rules = load_bad_words()
 
     # --------------------------------------------------------
     # Scan local music
@@ -733,8 +696,8 @@ def main():
 
             continue
 
-        artist_rule = blacklist_reason(artist, "", mixed_blacklist)
-        if artist_rule == "artist" or contains_bad_word(artist, bad_words):
+        artist_rule = blacklist_reason(artist, "", filtering_rules)
+        if artist_rule == "artist":
             print("  Skip: blacklisted artist")
             stats["blacklisted"] += 1
             continue
@@ -800,14 +763,9 @@ def main():
 
                 continue
 
-            reason = blacklist_reason(artist, song, mixed_blacklist)
+            reason = blacklist_reason(artist, song, filtering_rules)
             if reason:
                 print(f"  Blacklisted ({reason}): {song}")
-                stats["blacklisted"] += 1
-                continue
-
-            if contains_bad_word(song, bad_words) or contains_bad_word(artist, bad_words):
-                print(f"  Blacklisted (bad_words.txt): {song}")
                 stats["blacklisted"] += 1
                 continue
 
@@ -899,3 +857,4 @@ def main():
 if __name__ == "__main__":
 
     main()
+
