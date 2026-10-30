@@ -1,4 +1,3 @@
-
 import os
 import re
 import time
@@ -32,7 +31,7 @@ ARTISTS_FILE = "all_local_artists_sorted.txt"
 
 OUTPUT_FILE = "tbd.txt"
 
-BAD_WORDS_FILE = "bad_words.txt"
+BAD_WORDS_FILE = "bad_words.txt"  # Optional legacy word list
 
 
 # Number of artists to process.
@@ -242,6 +241,107 @@ def contains_bad_word(text, bad_words):
             return True
 
     return False
+
+
+# ============================================================
+# Mixed blacklist parser
+# ============================================================
+
+def load_blacklist(filename):
+    """Load three rule types from one file:
+
+    1. Artist rule:       Artist Name -
+    2. Keyword rule:      *word* (substring match against artist/song text)
+    3. Song rule:         Artist Name - Song Title
+
+    Matching ignores case, accents, punctuation and spacing.
+    """
+    blocked_artists = set()
+    blocked_keywords = set()
+    blocked_songs = set()
+
+    if not os.path.exists(filename):
+        print(f"Warning: {filename} not found; mixed blacklist is empty")
+        return blocked_artists, blocked_keywords, blocked_songs
+
+    with open(filename, "r", encoding="utf-8-sig") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or line.startswith("```"):
+                continue
+
+            # Keyword wildcard rule, e.g. *Fuck*
+            if len(line) >= 3 and line.startswith("*") and line.endswith("*"):
+                keyword = normalize(line[1:-1])
+                if keyword:
+                    blocked_keywords.add(keyword)
+                continue
+
+            # Artist-wide rule: trailing hyphen, e.g. Bad Bunny -
+            artist_match = re.fullmatch(r"(.+?)\s+-\s*", line)
+            if artist_match:
+                artist_key = normalize(artist_match.group(1))
+                if artist_key:
+                    blocked_artists.add(artist_key)
+                continue
+
+            # Specific song rule: Artist - Song
+            parts = re.split(r"\s+-\s+", line, maxsplit=1)
+            if len(parts) == 2:
+                artist_key = normalize(parts[0].strip())
+                song_key = normalize(clean_song_name(parts[1].strip()))
+                if artist_key and song_key:
+                    blocked_songs.add((artist_key, song_key))
+                else:
+                    print(f"  Ignored invalid blacklist line: {line}")
+                continue
+
+            print(f"  Ignored unrecognized blacklist line: {line}")
+
+    print("Mixed blacklist loaded:")
+    print(f"  Artists : {len(blocked_artists)}")
+    print(f"  Keywords: {len(blocked_keywords)}")
+    print(f"  Songs   : {len(blocked_songs)}")
+    return blocked_artists, blocked_keywords, blocked_songs
+
+
+def split_artist_credits(artist):
+    """Split common multi-artist credit formats for artist blacklist checks."""
+    parts = re.split(
+        r"\s*(?:,|;|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bx\b)\s*",
+        artist,
+        flags=re.IGNORECASE
+    )
+    return [normalize(part) for part in parts if normalize(part)]
+
+
+def blacklist_reason(artist, song, blacklist):
+    blocked_artists, blocked_keywords, blocked_songs = blacklist
+    artist_key = normalize(artist)
+    song_key = normalize(clean_song_name(song))
+
+    # Entire artist is excluded, including collaborations where that artist is credited.
+    credits = set(split_artist_credits(artist))
+    if artist_key:
+        credits.add(artist_key)
+    matched_artist = credits.intersection(blocked_artists)
+    if matched_artist:
+        return "artist"
+
+    # Wildcard keywords are substring rules; check both artist and title.
+    combined_text = normalize(f"{artist} {song}")
+    if any(keyword in combined_text for keyword in blocked_keywords):
+        return "keyword"
+
+    # Specific song rules require both artist and title to match.
+    if artist_key and song_key and (artist_key, song_key) in blocked_songs:
+        return "song"
+
+    # Also check individual credited artists for a specific song rule.
+    if song_key and any((credit, song_key) in blocked_songs for credit in credits):
+        return "song"
+
+    return None
 
 
 # ============================================================
@@ -572,6 +672,8 @@ def main():
         f"Bad words loaded: {len(bad_words)}"
     )
 
+    mixed_blacklist = load_blacklist(BAD_WORDS_FILE)
+
     # --------------------------------------------------------
     # Scan local music
     # --------------------------------------------------------
@@ -595,6 +697,7 @@ def main():
     # --------------------------------------------------------
 
     results = set()
+    result_keys = set()
 
     stats = {
         "processed": 0,
@@ -630,15 +733,10 @@ def main():
 
             continue
 
-        if contains_bad_word(
-                artist,
-                bad_words
-        ):
-
+        artist_rule = blacklist_reason(artist, "", mixed_blacklist)
+        if artist_rule == "artist" or contains_bad_word(artist, bad_words):
             print("  Skip: blacklisted artist")
-
             stats["blacklisted"] += 1
-
             continue
 
         # ----------------------------------------------------
@@ -702,13 +800,15 @@ def main():
 
                 continue
 
-            if contains_bad_word(
-                    song,
-                    bad_words
-            ):
-
+            reason = blacklist_reason(artist, song, mixed_blacklist)
+            if reason:
+                print(f"  Blacklisted ({reason}): {song}")
                 stats["blacklisted"] += 1
+                continue
 
+            if contains_bad_word(song, bad_words) or contains_bad_word(artist, bad_words):
+                print(f"  Blacklisted (bad_words.txt): {song}")
+                stats["blacklisted"] += 1
                 continue
 
             # Check local library
@@ -737,13 +837,11 @@ def main():
             if not key:
                 continue
 
-            if key in {
-                normalize(x)
-                for x in results
-            }:
+            if key in result_keys:
                 continue
 
             results.add(line)
+            result_keys.add(key)
 
             print(
                 f"  + {song}"
