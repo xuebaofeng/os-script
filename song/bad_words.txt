@@ -66,7 +66,7 @@ Arijit Singh - Kesariya
 Billie Eilish - bad guy
 BTS - Butter
 BTS - My Universe
-Cardi B - Girls Like You
+Girls Like You
 Cardi B - Taki Taki
 Chris Brown - No Guidance
 Chris Brown - Superhero
@@ -75,6 +75,7 @@ David Guetta - Sexy Bitch
 Doja Cat - Streets
 Doja Cat - Woman
 Don Omar - Cold Water
+DJ Snake -
 Don Omar - Dile
 Don Toliver - No Idea
 Don Toliver - Too Many Nights
@@ -83,6 +84,7 @@ Drake - Passionfruit
 Dua Lipa - Cold Heart
 Eminem - Lose Yourself
 Eminem - Mockingbird
+Elton John -
 Farruko - Calma
 Farruko - Diles
 Feid - PERRO NEGRO
@@ -196,11 +198,9 @@ Britney Spears - Gimme More
 Shreya Ghoshal - Samjhawan
 Shreya Ghoshal - Saibo
 Shreya Ghoshal - Pal
-Anirudh Ravichander - Arabic Kuthu
-Anirudh Ravichander - Chaleya
+Anirudh Ravichander -
 Anitta - Downtown
-Camilo - Desconocidos
-Camilo - Tattoo
+Camilo -
 Duki - Los del Espacio
 Duki - She Don't Give a Fo
 Grupo Frontera - QUE VUELVAS
@@ -256,3 +256,11 @@ Pop Smoke - What You Know Bout Love
 Quavo - Congratulations
 Swae Lee - Unforgettable
 The Kid LAROI - STAY
+Daft Punk - I Feel It Coming
+James Arthur - Rewrite The Stars
+Kali Uchis - See You Again
+Kid Cudi - Day 'N' Nite
+Lady Gaga - Shallow - Radio Edit
+Luis Miguel - Ahora Te Puedes Marchar
+Lil Peep - Falling Down - Bonus Track
+Tory Lanez - WHATS POPPIN - Remix

@@ -1,11 +1,17 @@
-
 import os
 import re
 import requests
 import unicodedata
 from bs4 import BeautifulSoup
 
-CACHE_DIR = "cache"
+
+# =========================
+# 基础配置
+# =========================
+
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+CACHE_DIR = os.path.join(BASE_DIR, "cache")
 os.makedirs(CACHE_DIR, exist_ok=True)
 
 HEADERS = {"User-Agent": "Mozilla/5.0"}
@@ -14,37 +20,74 @@ ARTISTS_URL = "https://kworb.net/spotify/artists.html"
 
 MUSIC_DIR = r"C:\shared\media\CloudMusic"
 
-TOP_N = 2  # 每个歌手提取前 N 首歌曲
-ART_N = 200  # top artists
+TOP_N = 2       # 每个歌手提取前 N 首歌曲
+ART_N = 200     # top artists
 
 
 # =========================
 # normalize
 # =========================
+
 def norm(s: str) -> str:
     return re.sub(r"\s+", " ", s.strip().lower())
+
+
+def norm_artist(s: str) -> str:
+    """
+    歌手名归一化：
+    忽略大小写、空格、标点和重音符号。
+    """
+    s = unicodedata.normalize("NFKD", s)
+    s = s.encode("ascii", "ignore").decode("ascii")
+    s = s.lower()
+
+    return re.sub(r"[^a-z0-9]", "", s)
+
+
+def norm_song(s: str) -> str:
+    """
+    歌曲名归一化：
+    忽略大小写、空格、标点和重音符号。
+    """
+    s = unicodedata.normalize("NFKD", s)
+    s = s.encode("ascii", "ignore").decode("ascii")
+    s = s.lower()
+
+    return re.sub(r"[^a-z0-9]", "", s)
 
 
 # =========================
 # safe filename
 # =========================
+
 def safe_name(name: str) -> str:
     name = unicodedata.normalize("NFKD", name)
     name = name.encode("ascii", "ignore").decode("ascii")
     name = re.sub(r'[<>:"/\\|?*]', "", name)
+
     return name.strip()
 
 
 # =========================
 # cache
 # =========================
+
 def get_cache(path, url):
     if os.path.exists(path):
         print(f"[CACHE] {os.path.basename(path)}")
-        return open(path, "r", encoding="utf-8").read()
+
+        with open(path, "r", encoding="utf-8") as f:
+            return f.read()
 
     print(f"[FETCH] {url}")
-    r = requests.get(url, headers=HEADERS)
+
+    r = requests.get(
+        url,
+        headers=HEADERS,
+        timeout=30
+    )
+
+    r.raise_for_status()
     r.encoding = "utf-8"
 
     with open(path, "w", encoding="utf-8") as f:
@@ -56,71 +99,121 @@ def get_cache(path, url):
 # =========================
 # 本地索引
 # =========================
+
 def build_local_index():
     index = set()
+
+    if not os.path.isdir(MUSIC_DIR):
+        print(f"[WARNING] music directory not found: {MUSIC_DIR}")
+        return index
 
     for root, _, files in os.walk(MUSIC_DIR):
         for f in files:
             name = os.path.splitext(f)[0]
-            index.add(norm(name))  # "artist - song"
+            index.add(norm(name))
 
     print(f"[LOCAL] songs loaded: {len(index)}")
+
     return index
 
 
 # =========================
 # clean song
 # =========================
+
 def clean_song(title: str) -> str:
-    # 去括号
+    """
+    清理歌曲名中的括号内容。
+    不再按 ' - ' 截断，避免误删歌曲标题。
+    """
+
     title = re.sub(r"\(.*?\)", "", title)
     title = re.sub(r"\[.*?\]", "", title)
 
-    # 只保留第一个 "-"
-    parts = [p.strip() for p in title.split(" - ")]
-    return parts[0].strip()
+    return re.sub(r"\s+", " ", title).strip()
 
 
 # =========================
 # 英文过滤
 # =========================
+
 def is_english(text: str) -> bool:
     cleaned = re.sub(r"[a-zA-Z\s\-']", "", text)
+
     return len(cleaned) == 0
 
 
 # =========================
-# bad words（前缀匹配）
+# blacklist
 # =========================
+
 def load_bad_words():
-    path = "bad_words.txt"
+    """
+    bad_words.txt 格式：
+
+    Artist - Song
+
+    必须同时匹配歌手和歌曲名。
+    """
+
+    path = os.path.join(BASE_DIR, "bad_words.txt")
 
     if not os.path.exists(path):
-        return []
+        print(f"[WARNING] blacklist not found: {path}")
+        return set()
+
+    bad_list = set()
 
     with open(path, "r", encoding="utf-8") as f:
-        return [norm(x) for x in f if x.strip()]
+
+        for line in f:
+            line = line.strip()
+
+            # 忽略空行和注释
+            if not line or line.startswith("#"):
+                continue
+
+            if " - " not in line:
+                print(f"[WARNING] invalid blacklist rule: {line}")
+                continue
+
+            artist, song = line.split(" - ", 1)
+
+            artist_key = norm_artist(artist)
+            song_key = norm_song(song)
+
+            if not artist_key or not song_key:
+                print(f"[WARNING] invalid blacklist rule: {line}")
+                continue
+
+            bad_list.add((artist_key, song_key))
+
+    return bad_list
 
 
-def is_bad(line: str, bad_list) -> bool:
-    line = norm(line)
+# =========================
+# exact artist + song match
+# =========================
 
-    for b in bad_list:
-        if line == b:
-            return True
-        if line.startswith(b):
-            return True
+def is_bad(artist: str, song: str, bad_list) -> bool:
 
-    return False
+    key = (
+        norm_artist(artist),
+        norm_song(song)
+    )
+
+    return key in bad_list
 
 
 # =========================
 # artist list（保序）
 # =========================
+
 def build_artist_list(soup):
     artists = []
 
     for a in soup.select("tr td.text a"):
+
         name = a.get_text(strip=True)
         link = a.get("href")
 
@@ -128,18 +221,21 @@ def build_artist_list(soup):
             artists.append((name, link))
 
     print(f"[INFO] artists loaded: {len(artists)}")
+
     return artists
 
 
 # =========================
 # TOP N
 # =========================
+
 def parse_top_n(html, n=TOP_N):
     soup = BeautifulSoup(html, "html.parser")
 
     songs = []
 
     for a in soup.select("tr td:first-child a"):
+
         song = a.get_text(strip=True)
 
         if song:
@@ -154,33 +250,43 @@ def parse_top_n(html, n=TOP_N):
 # =========================
 # main
 # =========================
+
 def main():
 
     # 清空 tbd
-    open("tbd.txt", "w", encoding="utf-8").close()
+    tbd_path = os.path.join(BASE_DIR, "tbd.txt")
+
+    open(tbd_path, "w", encoding="utf-8").close()
+
     print("[RESET] tbd.txt cleared\n")
 
+    # 获取歌手榜单
     html = get_cache(
         os.path.join(CACHE_DIR, "spotify_artists.html"),
         ARTISTS_URL
     )
 
     soup = BeautifulSoup(html, "html.parser")
+
     artist_list = build_artist_list(soup)
 
+    # 本地歌曲索引
     local_index = build_local_index()
 
+    # 黑名单
     bad_list = load_bad_words()
+
     print(f"[BAD] rules loaded: {len(bad_list)}")
 
     seen = set()
 
     print(f"\n[START] TOP {TOP_N}\n")
 
-    with open("tbd.txt", "a", encoding="utf-8") as out:
+    with open(tbd_path, "a", encoding="utf-8") as out:
 
         for i, (artist, link) in enumerate(artist_list):
-            if i > ART_N:
+
+            if i >= ART_N:
                 break
 
             print(f"[{i}] {artist}")
@@ -192,7 +298,12 @@ def main():
                 f"{safe_name(artist)}_spotify.html"
             )
 
-            html = get_cache(cache_file, url)
+            try:
+                html = get_cache(cache_file, url)
+
+            except requests.RequestException as e:
+                print(f"   [ERROR] {artist}: {e}")
+                continue
 
             songs = parse_top_n(html)
 
@@ -214,19 +325,20 @@ def main():
                     continue
 
                 line = f"{artist} - {song}"
-                key = norm(line)
 
                 # 本地存在
-                if key in local_index:
+                if norm(line) in local_index:
                     print(f"   SKIP (exists): {line}")
                     continue
 
-                # bad filter（前缀）
-                if is_bad(line, bad_list):
-                    print(f"   SKIP (bad): {line}")
+                # 黑名单：歌手 + 歌名同时匹配
+                if is_bad(artist, song, bad_list):
+                    print(f"   SKIP (blacklist): {line}")
                     continue
 
                 # 去重
+                key = norm(line)
+
                 if key in seen:
                     continue
 
@@ -240,14 +352,16 @@ def main():
     # =========================
     # 最后排序
     # =========================
+
     print("\n[SORT] fixing order...")
 
-    with open("tbd.txt", "r", encoding="utf-8") as f:
+    with open(tbd_path, "r", encoding="utf-8") as f:
         lines = [x.strip() for x in f if x.strip()]
 
     lines = sorted(set(lines), key=lambda x: x.lower())
 
-    with open("tbd.txt", "w", encoding="utf-8") as f:
+    with open(tbd_path, "w", encoding="utf-8") as f:
+
         for x in lines:
             f.write(x + "\n")
 
