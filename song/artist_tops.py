@@ -1,3 +1,4 @@
+
 import os
 import re
 import requests
@@ -12,6 +13,9 @@ HEADERS = {"User-Agent": "Mozilla/5.0"}
 ARTISTS_URL = "https://kworb.net/spotify/artists.html"
 
 MUSIC_DIR = r"C:\shared\media\CloudMusic"
+
+TOP_N = 2  # 每个歌手提取前 N 首歌曲
+ART_N = 200  # top artists
 
 
 # =========================
@@ -58,7 +62,7 @@ def build_local_index():
     for root, _, files in os.walk(MUSIC_DIR):
         for f in files:
             name = os.path.splitext(f)[0]
-            index.add(norm(name))   # "artist - song"
+            index.add(norm(name))  # "artist - song"
 
     print(f"[LOCAL] songs loaded: {len(index)}")
     return index
@@ -104,7 +108,7 @@ def is_bad(line: str, bad_list) -> bool:
     for b in bad_list:
         if line == b:
             return True
-        if line.startswith(b):   # ✅ 前缀匹配
+        if line.startswith(b):
             return True
 
     return False
@@ -128,12 +132,23 @@ def build_artist_list(soup):
 
 
 # =========================
-# TOP1
+# TOP N
 # =========================
-def parse_top1(html):
+def parse_top_n(html, n=TOP_N):
     soup = BeautifulSoup(html, "html.parser")
-    a = soup.select_one("tr td:first-child a")
-    return a.get_text(strip=True) if a else None
+
+    songs = []
+
+    for a in soup.select("tr td:first-child a"):
+        song = a.get_text(strip=True)
+
+        if song:
+            songs.append(song)
+
+        if len(songs) >= n:
+            break
+
+    return songs
 
 
 # =========================
@@ -160,12 +175,12 @@ def main():
 
     seen = set()
 
-    print("\n[START]\n")
+    print(f"\n[START] TOP {TOP_N}\n")
 
     with open("tbd.txt", "a", encoding="utf-8") as out:
 
         for i, (artist, link) in enumerate(artist_list):
-            if i > 100:
+            if i > ART_N:
                 break
 
             print(f"[{i}] {artist}")
@@ -179,47 +194,48 @@ def main():
 
             html = get_cache(cache_file, url)
 
-            song = parse_top1(html)
-            if not song:
+            songs = parse_top_n(html)
+
+            if not songs:
                 continue
 
-            song = clean_song(song)
-
-
-
-            # ❌ 歌曲必须英文
-            if not is_english(song):
-                print(f"   SKIP song (non-english): {song}")
-                continue
-
-            # ❌ 歌手必须英文
+            # 歌手必须英文
             if not is_english(artist):
                 print(f"   SKIP artist (non-english): {artist}")
                 continue
 
-            line = f"{artist} - {song}"
-            key = norm(line)
+            for song in songs:
 
-            # 本地存在
-            if key in local_index:
-                print(f"   SKIP (exists): {line}")
-                continue
+                song = clean_song(song)
 
-            # bad filter（前缀）
-            if is_bad(line, bad_list):
-                print(f"   SKIP (bad): {line}")
-                continue
+                # 歌曲必须英文
+                if not is_english(song):
+                    print(f"   SKIP song (non-english): {song}")
+                    continue
 
-            # 去重
-            if key in seen:
-                continue
+                line = f"{artist} - {song}"
+                key = norm(line)
 
-            seen.add(key)
+                # 本地存在
+                if key in local_index:
+                    print(f"   SKIP (exists): {line}")
+                    continue
 
-            print(f"   WRITE: {line}")
+                # bad filter（前缀）
+                if is_bad(line, bad_list):
+                    print(f"   SKIP (bad): {line}")
+                    continue
 
-            out.write(line + "\n")
-            out.flush()
+                # 去重
+                if key in seen:
+                    continue
+
+                seen.add(key)
+
+                print(f"   WRITE: {line}")
+
+                out.write(line + "\n")
+                out.flush()
 
     # =========================
     # 最后排序

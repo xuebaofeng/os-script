@@ -337,11 +337,33 @@ def main():
         if not selected: raise SystemExit(f"game_id {args.game_id} not found in Trace JSON")
     else:
         candidates=match_candidates(matches,path)
-        if len(candidates)!=1:
-            print("Could not safely select exactly one Trace match. Candidates:",file=sys.stderr)
-            for m in (candidates if candidates else matches): print("  "+display_match(m),file=sys.stderr)
-            print("Re-run with --game-id GAME_ID",file=sys.stderr); raise SystemExit(2)
-        selected=candidates[0]
+        if len(candidates)==1:
+            selected=candidates[0]
+            print("Unique team-name match found; selecting automatically.")
+        else:
+            # If the path gives no reliable team-name match, offer all Trace matches.
+            # If it gives multiple matches, limit the interactive list to those candidates.
+            choices=candidates if candidates else matches
+            if candidates:
+                print(f"Could not identify a unique match ({len(candidates)} candidates). Please choose:")
+            else:
+                print("No team-name matches found. Showing all Trace matches; please choose:")
+            for i,m in enumerate(choices,1):
+                print(f"  [{i}] {display_match(m)}")
+            print("Enter a number to select a match, or q to quit.")
+            while True:
+                try:
+                    answer=input("> ").strip()
+                except (EOFError, KeyboardInterrupt):
+                    print("\nSelection cancelled.",file=sys.stderr)
+                    raise SystemExit(2)
+                if answer.lower() in {"q","quit","exit"}:
+                    print("Selection cancelled.",file=sys.stderr)
+                    raise SystemExit(2)
+                if answer.isdigit() and 1 <= int(answer) <= len(choices):
+                    selected=choices[int(answer)-1]
+                    break
+                print(f"Please enter a number from 1 to {len(choices)}, or q to quit.")
     print("Match: "+display_match(selected)); print("Period: "+period)
     digest=sha256_file(path); size=path.stat().st_size
     row=upsert_video(conn,selected,path,period,digest,size)
