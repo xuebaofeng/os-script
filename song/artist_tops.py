@@ -20,8 +20,8 @@ ARTISTS_URL = "https://kworb.net/spotify/artists.html"
 
 MUSIC_DIR = r"C:\shared\media\CloudMusic"
 
-TOP_N = 2       # 每个歌手提取前 N 首歌曲
-ART_N = 200     # top artists
+TOP_N = 4       # 每个歌手提取前 N 首歌曲
+ART_N = 400     # top artists
 
 
 # =========================
@@ -147,62 +147,93 @@ def is_english(text: str) -> bool:
 # blacklist
 # =========================
 
+
 def load_bad_words():
-    """
-    bad_words.txt 格式：
-
-    Artist - Song
-
-    必须同时匹配歌手和歌曲名。
-    """
-
     path = os.path.join(BASE_DIR, "bad_words.txt")
 
     if not os.path.exists(path):
         print(f"[WARNING] blacklist not found: {path}")
-        return set()
+        return {
+            "artists": set(),
+            "songs": set(),
+            "artist_songs": set()
+        }
 
-    bad_list = set()
+    bad_list = {
+        "artists": set(),
+        "songs": set(),
+        "artist_songs": set()
+    }
 
     with open(path, "r", encoding="utf-8") as f:
-
         for line in f:
             line = line.strip()
 
-            # 忽略空行和注释
             if not line or line.startswith("#"):
                 continue
 
-            if " - " not in line:
-                print(f"[WARNING] invalid blacklist rule: {line}")
+            # 歌曲规则：- Song
+            if line.startswith("- "):
+                song_key = norm_song(line[2:].strip())
+                if song_key:
+                    bad_list["songs"].add(song_key)
+                else:
+                    print(f"[WARNING] invalid blacklist rule: {line}")
                 continue
 
-            artist, song = line.split(" - ", 1)
-
-            artist_key = norm_artist(artist)
-            song_key = norm_song(song)
-
-            if not artist_key or not song_key:
-                print(f"[WARNING] invalid blacklist rule: {line}")
+            # 艺人规则：Artist -
+            if line.endswith(" -"):
+                artist_key = norm_artist(line[:-2].strip())
+                if artist_key:
+                    bad_list["artists"].add(artist_key)
+                else:
+                    print(f"[WARNING] invalid blacklist rule: {line}")
                 continue
 
-            bad_list.add((artist_key, song_key))
+            # 指定艺人 + 歌曲：Artist - Song
+            if " - " in line:
+                artist, song = line.split(" - ", 1)
+                artist_key = norm_artist(artist)
+                song_key = norm_song(song)
+
+                if artist_key and song_key:
+                    bad_list["artist_songs"].add(
+                        (artist_key, song_key)
+                    )
+                else:
+                    print(f"[WARNING] invalid blacklist rule: {line}")
+                continue
+
+            print(f"[WARNING] invalid blacklist rule: {line}")
 
     return bad_list
 
 
-# =========================
-# exact artist + song match
-# =========================
-
 def is_bad(artist: str, song: str, bad_list) -> bool:
+    artist_key = norm_artist(artist)
 
-    key = (
-        norm_artist(artist),
-        norm_song(song)
-    )
+    # 1. 排除整个艺人
+    if artist_key in bad_list["artists"]:
+        return True
 
-    return key in bad_list
+    # 2. 提取歌曲标题各级前缀，支持 Remix、Featuring 等后缀
+    parts = [p.strip() for p in song.split(" - ") if p.strip()]
+
+    song_keys = {
+        norm_song(" - ".join(parts[:i]))
+        for i in range(1, len(parts) + 1)
+    }
+
+    # 3. 不限艺人的歌曲黑名单
+    if song_keys & bad_list["songs"]:
+        return True
+
+    # 4. 指定艺人的歌曲黑名单
+    for song_key in song_keys:
+        if (artist_key, song_key) in bad_list["artist_songs"]:
+            return True
+
+    return False
 
 
 # =========================
