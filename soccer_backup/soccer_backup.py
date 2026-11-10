@@ -180,6 +180,12 @@ def display_match(m):
     score=f"{m.get('home_score') if m.get('home_score') is not None else '?'} - {m.get('away_score') if m.get('away_score') is not None else '?'}"
     return f"game_id={m['game_id']} | {m.get('match_date','')} | {m.get('home_team','')} {score} {m.get('away_team','')} | {m.get('division','')}"
 
+def backup_title(match, period):
+    home_team = match.get("home_team", "")
+    if home_team == "U15 MLS NEXT 2":
+        home_team = "Ballistic United Soccer Club U15 MLS NEXT 2"
+    return f"{match.get('match_date','')} {home_team} vs {match.get('away_team','')} {period}"
+
 def get_match(conn,gid):
     r=conn.execute("SELECT * FROM matches WHERE game_id=?",(gid,)).fetchone()
     return dict(r) if r else None
@@ -297,7 +303,7 @@ def upload(youtube, conn, video_row, match, path, chunk_mb=8):
         print(f"Found existing YouTube backup: https://youtu.be/{found}"); return found
     description=(f"Soccer match backup\n\n{display_match(match)}\nOriginal filename: {Path(path).name}\nFull local path: {Path(path).resolve()}\n"
                  f"SHA256: {digest}\n\nSOCCER_BACKUP_GAME_ID={match['game_id']}\nSOCCER_BACKUP_PERIOD={period}\nSOCCER_BACKUP_SHA256={digest}")
-    body={"snippet":{"title":f"{match.get('match_date','')} {match.get('home_team','')} vs {match.get('away_team','')} {period}","description":description,"categoryId":"17"},"status":{"privacyStatus":"private"}}
+    body={"snippet":{"title":backup_title(match, period),"description":description,"categoryId":"17"},"status":{"privacyStatus":"private"}}
     media=MediaFileUpload(str(path),chunksize=chunk_mb*1024*1024,resumable=True)
     req=youtube.videos().insert(part="snippet,status",body=body,media_body=media)
     update_video(conn,vid,upload_status="uploading",last_attempt_at=now(),error_message=None)
