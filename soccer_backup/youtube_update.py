@@ -91,7 +91,7 @@ def get_uploaded_videos(youtube):
         response = (
             youtube.videos()
             .list(
-                part="snippet",
+                part="snippet,status",
                 id=",".join(batch_ids),
                 maxResults=50
             )
@@ -207,7 +207,7 @@ def add_video_to_playlist(youtube, playlist_id, video_id):
     ).execute()
 
 
-def update_video_title(youtube, video, title):
+def update_video(youtube, video, title):
     current_snippet = video["snippet"]
     snippet = {
         key: current_snippet[key]
@@ -230,10 +230,13 @@ def update_video_title(youtube, video, title):
         snippet["localized"] = localized
 
     youtube.videos().update(
-        part="snippet",
+        part="snippet,status",
         body={
             "id": video["id"],
-            "snippet": snippet
+            "snippet": snippet,
+            "status": {
+                "privacyStatus": "public"
+            }
         }
     ).execute()
 
@@ -291,10 +294,16 @@ def main():
         video_id = video["id"]
         current_title = video.get("snippet", {}).get("title", "")
         updated_title = ensure_title_phrase(current_title)
+        current_visibility = video.get("status", {}).get(
+            "privacyStatus",
+            "unknown"
+        )
+        needs_visibility_update = current_visibility != "public"
 
         print()
         print(f"Video ID: {video_id}")
         print(f"Title: {current_title}")
+        print(f"Visibility: {current_visibility}")
 
         if video_id in playlist_video_ids:
             print("Playlist: already contains video.")
@@ -309,9 +318,21 @@ def main():
             print("Title: already contains required phrase.")
         elif args.dry_run:
             print(f"Title: would change to {updated_title}")
-        else:
-            update_video_title(youtube, video, updated_title)
+
+        if needs_visibility_update and args.dry_run:
+            print("Visibility: would change to public.")
+        elif not needs_visibility_update:
+            print("Visibility: already public.")
+
+        if not args.dry_run and (
+                updated_title != current_title
+                or needs_visibility_update
+        ):
+            update_video(youtube, video, updated_title)
+        if not args.dry_run and updated_title != current_title:
             print(f"Title: updated to {updated_title}")
+        if not args.dry_run and needs_visibility_update:
+            print("Visibility: updated to public.")
 
     print()
     print("Done.")
