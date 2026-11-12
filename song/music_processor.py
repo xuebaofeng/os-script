@@ -22,7 +22,6 @@ from mutagen.mp4 import MP4
 # ==================== 配置 ====================
 
 MUSIC_ROOT = Path(r"C:\shared\media\CloudMusic")
-LYRICS_ROOT = MUSIC_ROOT / "lyrics"
 
 API = "https://lrclib.net"
 
@@ -243,82 +242,6 @@ def save_cached_lyrics(meta, data):
             connection.commit()
         finally:
             connection.close()
-
-
-def has_positive_lyrics_cache(meta):
-    artist_key, title_key = lyrics_cache_key(meta)
-    with _lyrics_db_lock:
-        connection = sqlite3.connect(SCAN_DB_PATH, timeout=30)
-        try:
-            row = connection.execute("""
-                SELECT found FROM lyrics_cache
-                WHERE artist_key=? AND title_key=?
-            """, (artist_key, title_key)).fetchone()
-            return bool(row and row[0])
-        finally:
-            connection.close()
-
-
-def import_lrc_files():
-    """Import local LRC files into SQLite without replacing positive cache rows."""
-    if not LYRICS_ROOT.is_dir():
-        return 0
-
-    imported = 0
-    audio_extensions = tuple(SUPPORTED)
-    lrc_files = (
-        path for path in LYRICS_ROOT.rglob("*")
-        if path.is_file() and path.suffix.lower() == ".lrc"
-    )
-
-    for lrc_path in lrc_files:
-        try:
-            relative = lrc_path.relative_to(LYRICS_ROOT)
-            audio_path = next(
-                (
-                    MUSIC_ROOT / relative.with_suffix(extension)
-                    for extension in audio_extensions
-                    if (MUSIC_ROOT / relative.with_suffix(extension)).is_file()
-                ),
-                None
-            )
-
-            if audio_path:
-                meta = get_metadata(audio_path)
-            else:
-                artist, title = parse_filename(lrc_path)
-                meta = {
-                    "artist": artist,
-                    "title": title,
-                    "album": "",
-                    "duration": None
-                }
-
-            if not meta or not meta.get("artist") or not meta.get("title"):
-                logger.warning("无法从 LRC 识别艺人和曲名：%s", lrc_path)
-                continue
-            if has_positive_lyrics_cache(meta):
-                continue
-
-            synced = lrc_path.read_text(encoding="utf-8-sig").strip()
-            if not synced:
-                continue
-            plain = re.sub(r"\[\d{1,2}:\d{2}(?:\.\d+)?\]", "", synced)
-            plain = re.sub(
-                r"(?m)^\[(?:ar|ti|al|by|offset|length|re|ve):[^]]*\]\s*$",
-                "",
-                plain,
-                flags=re.IGNORECASE
-            ).strip()
-            save_cached_lyrics(meta, {
-                "plainLyrics": plain,
-                "syncedLyrics": synced
-            })
-            imported += 1
-        except Exception:
-            logger.exception("导入 LRC 失败：%s", lrc_path)
-
-    return imported
 
 
 def relative_key(path):
@@ -840,28 +763,6 @@ def read_embedded_lyrics(path):
 
 # ==================== 保存 LRC ====================
 
-def save_lrc(path, root, synced):
-
-    if not synced:
-        return
-
-    relative = path.relative_to(root)
-
-    lrc_path = (
-        LYRICS_ROOT / relative
-    ).with_suffix(".lrc")
-
-    lrc_path.parent.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
-    lrc_path.write_text(
-        synced,
-        encoding="utf-8-sig"
-    )
-
-
 # ==================== 单曲处理 ====================
 
 def process_file(path, overwrite=False, normalize=True, check_lyrics=True):
@@ -964,13 +865,6 @@ def process_file(path, overwrite=False, normalize=True, check_lyrics=True):
             synced
         )
 
-        # 保存 LRC
-        save_lrc(
-            path,
-            MUSIC_ROOT,
-            synced
-        )
-
         logger.info(
             "完成：%s (%s)",
             path.name,
@@ -1024,11 +918,6 @@ def main():
 
         return
 
-    LYRICS_ROOT.mkdir(
-        parents=True,
-        exist_ok=True
-    )
-
     # 排除 lyrics 目录
     files = [
         p
@@ -1041,9 +930,6 @@ def main():
     ]
 
     scan_db = open_scan_db()
-    imported_lrc_count = import_lrc_files()
-    if imported_lrc_count:
-        print(f"从本地 LRC 导入歌词：{imported_lrc_count} 首")
     scan_state = load_scan_state(scan_db)
     work_items = []
     missing_files = []
@@ -1079,7 +965,6 @@ def main():
 
     print()
     print("曲库：", MUSIC_ROOT)
-    print("歌词：", LYRICS_ROOT)
     print("歌曲数量：", len(files))
     print(f"本次需处理：{len(work_items)}，已有歌词且状态未变而跳过：{cached_count}")
     print("音频已有歌词时不查询新歌词；文件修改时间未变时跳过音量检查")
@@ -1185,7 +1070,7 @@ def main():
     print("未找到：", stats["missing"])
     print("失败：", stats["failed"])
     print()
-    print("歌词目录：", LYRICS_ROOT)
+    print("歌词与扫描记录数据库：", SCAN_DB_PATH)
     print("日志：", MUSIC_ROOT / "lyrics.log")
 
 
