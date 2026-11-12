@@ -1,280 +1,866 @@
+
 import os
 import re
+import time
+import hashlib
 import requests
+import unicodedata
+
+from pathlib import Path
+from urllib.parse import urljoin
 from bs4 import BeautifulSoup
-import extract_artists
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
+
+
+# ============================================================
+# Configuration
+# ============================================================
 
 CACHE_DIR = "cache"
 os.makedirs(CACHE_DIR, exist_ok=True)
 
-HEADERS = {"User-Agent": "Mozilla/5.0"}
+HEADERS = {
+    "User-Agent": "Mozilla/5.0"
+}
+
+ARTISTS_URL = "https://kworb.net/spotify/artists.html"
 
 MUSIC_DIRS = [
     r"C:\shared\media\CloudMusic",
-    r"C:\BaiduNetdiskDownload"
 ]
 
-not_found_artists = []
+ARTISTS_FILE = "all_local_artists_sorted.txt"
 
-# =========================
-# cache helper
-# =========================
-def get_cache(name, url):
-    path = os.path.join(CACHE_DIR, name)
+OUTPUT_FILE = "tbd.txt"
 
-    if os.path.exists(path):
-        print(f"[CACHE] {name}")
-        return open(path, "r", encoding="utf-8").read()
-
-    print(f"[FETCH] {name}")
-    r = requests.get(url, headers=HEADERS)
-    r.encoding = "utf-8"
-
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(r.text)
-
-    return r.text
+BAD_WORDS_FILE = "bad_words.txt"  # All filtering rules are kept in this file
 
 
-# =========================
-# normalize
-# =========================
-def norm(s):
-    return re.sub(r"\s+", " ", s.strip().lower())
+# Number of artists to process.
+# 100 = first 100 artists
+# 200 = first 200 artists
+# None = all artists
+
+ARTIST_LIMIT = 10
 
 
-# =========================
-# artist cache key（🔥关键）
-# =========================
-def artist_key(artist):
-    return re.sub(r"\W+", "_", artist.lower()).strip("_")
+# Number of top songs per artist
+
+TOP_N = 10
 
 
-# =========================
-# clean title
-# =========================
-def clean_title(t):
-    t = t.replace("â", "'")
+# Delay between requests (seconds)
 
-    # 去掉括号
-    t = re.sub(r"\(.*?\)", "", t)
-    t = re.sub(r"\[.*?\]", "", t)
-
-    # 🔥 核心：只取第一个 "-"
-    t = t.split(" - ")[0].strip()
-
-    # 再清理多余空格
-    t = re.sub(r"\s+", " ", t).strip()
-
-    return t
+REQUEST_DELAY = 0.5
 
 
-# =========================
-# clean local filename
-# =========================
-def clean_song_name(filename):
-    name = os.path.splitext(filename)[0]
-    name = name.replace("â", "'")
+# ============================================================
+# HTTP Session
+# ============================================================
 
-    if " - " in name:
-        name = name.split(" - ", 1)[1]
+session = requests.Session()
 
-    name = re.sub(r"\(.*?\)", "", name)
-    name = re.sub(r"\[.*?\]", "", name)
+retry = Retry(
+    total=3,
+    backoff_factor=1,
+    status_forcelist=[429, 500, 502, 503, 504],
+    allowed_methods=["GET"]
+)
 
-    return norm(name)
+adapter = HTTPAdapter(max_retries=retry)
+
+session.mount("https://", adapter)
+session.mount("http://", adapter)
+
+session.headers.update(HEADERS)
 
 
-# =========================
-# local index
-# =========================
-def build_music_index():
-    index = set()
+# ============================================================
+# Cache
+# ============================================================
 
-    for d in MUSIC_DIRS:
-        if not os.path.exists(d):
+def get_cache_path(url):
+
+    key = hashlib.md5(
+        url.encode("utf-8")
+    ).hexdigest()
+
+    return os.path.join(CACHE_DIR, key + ".html")
+
+
+def get_html(url, legacy_cache_names=()):
+
+    cache_path = get_cache_path(url)
+
+    if os.path.exists(cache_path):
+
+        with open(
+                cache_path,
+                "r",
+                encoding="utf-8"
+        ) as f:
+
+            return f.read()
+
+    for name in legacy_cache_names:
+        legacy_path = os.path.join(CACHE_DIR, name)
+        if os.path.exists(legacy_path):
+            with open(legacy_path, "r", encoding="utf-8") as f:
+                return f.read()
+
+    print(f"Downloading: {url}")
+
+    response = session.get(
+        url,
+        timeout=30
+    )
+
+    response.raise_for_status()
+
+    response.encoding = response.apparent_encoding
+
+    html = response.text
+
+    with open(
+            cache_path,
+            "w",
+            encoding="utf-8"
+    ) as f:
+
+        f.write(html)
+
+    time.sleep(REQUEST_DELAY)
+
+    return html
+
+
+# ============================================================
+# Text normalization
+# ============================================================
+
+def normalize(text):
+
+    text = unicodedata.normalize(
+        "NFKD",
+        text
+    )
+
+    text = text.encode(
+        "ascii",
+        "ignore"
+    ).decode("ascii")
+
+    text = text.lower()
+
+    text = re.sub(
+        r"[^a-z0-9]",
+        "",
+        text
+    )
+
+    return text
+
+
+def clean_song_name(text):
+    """Remove metadata/version suffixes for comparison.
+
+    Examples:
+      All Out of Love - Remastered -> All Out of Love
+      Everybody - Radio Edit       -> Everybody
+      Song (2011 Remaster)         -> Song
+
+    This function is used for matching. Original scraped titles are retained
+    for output to tbd.txt.
+    """
+    text = str(text or "").strip()
+
+    # Remove bracketed annotations first.
+    text = re.sub(r"\([^)]*\)|\[[^]]*\]|\{[^}]*\}", " ", text)
+
+    # Remove common trailing release/version labels. Repeat to handle
+    # combinations such as "Song - Remastered - Radio Edit".
+    suffixes = [
+        r"radio\s+edit", r"single\s+edit", r"album\s+version",
+        r"single\s+version", r"radio\s+version", r"remaster(?:ed)?(?:\s+\d{4})?",
+        r"\d{4}\s+remaster", r"extended\s+(?:mix|version|edit)",
+        r"(?:original\s+)?(?:extended\s+)?mix", r"club\s+mix",
+        r"dance\s+mix", r"instrumental(?:\s+version)?", r"acoustic(?:\s+version)?",
+        r"karaoke(?:\s+version)?", r"explicit(?:\s+version)?",
+        r"clean(?:\s+version)?", r"mono", r"stereo"
+    ]
+    suffix_pattern = re.compile(
+        r"\s*(?:[-–—|:]\s*)?(?:" + "|".join(suffixes) + r")\s*$",
+        re.IGNORECASE
+    )
+    previous = None
+    while text != previous:
+        previous = text
+        text = suffix_pattern.sub("", text).strip(" -–—|:")
+
+    return re.sub(r"\s+", " ", text).strip()
+
+
+# ============================================================
+# English filtering
+# ============================================================
+
+def is_english(text):
+
+    return bool(
+        re.fullmatch(
+            r"[a-zA-Z\s\-']+",
+            text.strip()
+        )
+    )
+
+
+# ============================================================
+# Filtering rules: bad_words.txt ONLY
+# ============================================================
+
+def load_bad_words():
+    """Read all exclusion rules from bad_words.txt.
+
+    Supported formats:
+      Artist Name -       block all songs by artist
+      *word*               substring keyword match against artist/song
+      Artist - Song        block one artist/song pair
+      - Song               block this song title for every artist
+      plain word           legacy bad-word filter (substring match)
+    """
+    blocked_artists = set()
+    blocked_keywords = set()
+    blocked_songs = set()
+    blocked_song_titles = set()
+    plain_words = set()
+
+    if not os.path.exists(BAD_WORDS_FILE):
+        print(f"Warning: {BAD_WORDS_FILE} not found; no filtering rules loaded")
+        return blocked_artists, blocked_keywords, blocked_songs, blocked_song_titles, plain_words
+
+    with open(BAD_WORDS_FILE, "r", encoding="utf-8-sig") as f:
+        for raw_line in f:
+            line = raw_line.strip()
+            if not line or line.startswith("#") or line.startswith("```"):
+                continue
+
+            if len(line) >= 3 and line.startswith("*") and line.endswith("*"):
+                key = normalize(line[1:-1])
+                if key:
+                    blocked_keywords.add(key)
+                continue
+
+            title_match = re.fullmatch(r"-\s+(.+?)\s*", line)
+            if title_match:
+                key = normalize(clean_song_name(title_match.group(1)))
+                if key:
+                    blocked_song_titles.add(key)
+                continue
+
+            artist_match = re.fullmatch(r"(.+?)\s+-\s*", line)
+            if artist_match:
+                key = normalize(artist_match.group(1))
+                if key:
+                    blocked_artists.add(key)
+                continue
+
+            parts = re.split(r"\s+-\s+", line, maxsplit=1)
+            if len(parts) == 2:
+                artist_key = normalize(parts[0])
+                song_key = normalize(clean_song_name(parts[1]))
+                if artist_key and song_key:
+                    blocked_songs.add((artist_key, song_key))
+                continue
+
+            # Backward-compatible plain word rule.
+            key = normalize(line)
+            if key:
+                plain_words.add(key)
+
+    print(f"Filtering rules loaded from {BAD_WORDS_FILE}:")
+    print(f"  Artists       : {len(blocked_artists)}")
+    print(f"  Keywords      : {len(blocked_keywords)}")
+    print(f"  Artist + song : {len(blocked_songs)}")
+    print(f"  Song titles   : {len(blocked_song_titles)}")
+    print(f"  Plain words   : {len(plain_words)}")
+
+    return blocked_artists, blocked_keywords, blocked_songs, blocked_song_titles, plain_words
+
+
+def split_artist_credits(artist):
+    parts = re.split(
+        r"\s*(?:,|;|&|\bfeat\.?\b|\bft\.?\b|\bfeaturing\b|\bx\b)\s*",
+        artist,
+        flags=re.IGNORECASE
+    )
+    return [normalize(part) for part in parts if normalize(part)]
+
+
+def blacklist_reason(artist, song, rules):
+    blocked_artists, blocked_keywords, blocked_songs, blocked_song_titles, plain_words = rules
+    artist_key = normalize(artist)
+    song_key = normalize(clean_song_name(song))
+    credits = set(split_artist_credits(artist))
+    if artist_key:
+        credits.add(artist_key)
+
+    if credits.intersection(blocked_artists):
+        return "artist"
+
+    combined_text = normalize(f"{artist} {song}")
+    if any(word in combined_text for word in blocked_keywords):
+        return "keyword"
+    if any(word in combined_text for word in plain_words):
+        return "bad word"
+    if song_key and song_key in blocked_song_titles:
+        return "song title"
+    if song_key and any((credit, song_key) in blocked_songs for credit in credits):
+        return "artist + song"
+
+    return None
+
+
+# ============================================================
+# Read artist list
+# ============================================================
+
+def load_artists(filename):
+
+    artists = []
+
+    if not os.path.exists(filename) and filename == ARTISTS_FILE:
+        legacy_filename = "all_artists.txt"
+        if os.path.exists(legacy_filename):
+            filename = legacy_filename
+
+    if not os.path.exists(filename):
+        raise FileNotFoundError(f"Artist list not found: {filename}")
+
+    with open(
+            filename,
+            "r",
+            encoding="utf-8-sig"
+    ) as f:
+
+        for line in f:
+
+            line = line.strip()
+
+            match = re.match(
+                r"^(.+?):\s*\d+\s+songs?$",
+                line,
+                re.IGNORECASE
+            )
+
+            artist = match.group(1).strip() if match else line
+
+            if artist.startswith("#"):
+                continue
+
+            if artist:
+                artists.append(artist)
+
+    return list(dict.fromkeys(artists))
+
+
+# ============================================================
+# Find artist URLs from Kworb
+# ============================================================
+
+def load_artist_urls():
+
+    html = get_html(ARTISTS_URL, ("spotify_artists.html",))
+
+    soup = BeautifulSoup(
+        html,
+        "html.parser"
+    )
+
+    artist_urls = {}
+
+    for a in soup.find_all("a", href=True):
+
+        name = a.get_text(
+            " ",
+            strip=True
+        )
+
+        href = a["href"]
+
+        if not name:
             continue
 
-        for root, _, files in os.walk(d):
-            for f in files:
-                index.add(clean_song_name(f))
+        if "artist/" not in href:
+            continue
 
-    return index
+        url = urljoin(
+            ARTISTS_URL,
+            href
+        )
 
+        artist_urls[normalize(name)] = url
 
-# =========================
-# bad words
-# =========================
-def load_bad_words():
-    path = "bad_words.txt"
-    if not os.path.exists(path):
-        return []
-
-    with open(path, "r", encoding="utf-8") as f:
-        return [line.strip().lower() for line in f if line.strip()]
+    return artist_urls
 
 
-def is_bad(artist, song, bad_list):
-    full = f"{artist.lower()} - {song.lower()}"
+# ============================================================
+# Get artist songs page URL
+# ============================================================
 
-    for b in bad_list:
-        if b == full:
-            return True
-        if full.startswith(b):
+def get_songs_url(artist_url):
+
+    # Kworb artist page:
+    # /spotify/artist/ARTIST_ID.html
+    #
+    # Songs page:
+    # /spotify/artist/ARTIST_ID_songs.html
+
+    if artist_url.endswith("_songs.html"):
+
+        return artist_url
+
+    if artist_url.endswith(".html"):
+
+        return artist_url[:-5] + "_songs.html"
+
+    return artist_url + "_songs.html"
+
+
+# ============================================================
+# Parse top N songs
+# ============================================================
+
+def parse_top_n(html, top_n):
+
+    soup = BeautifulSoup(
+        html,
+        "html.parser"
+    )
+
+    songs = []
+
+    seen = set()
+
+    for table in soup.find_all("table"):
+
+        for row in table.find_all("tr"):
+
+            cells = row.find_all("td")
+
+            if not cells:
+                continue
+
+            # Song title is normally in the first column
+
+            a = cells[0].find("a")
+
+            if not a:
+                continue
+
+            song = a.get_text(
+                " ",
+                strip=True
+            )
+
+            song = clean_song_name(song)
+
+            if not song:
+                continue
+
+            key = normalize(song)
+
+            if not key or key in seen:
+                continue
+
+            seen.add(key)
+
+            songs.append(song)
+
+            if len(songs) >= top_n:
+
+                return songs
+
+    return songs
+
+
+# ============================================================
+# Scan local music library
+# ============================================================
+
+def load_local_songs():
+
+    print("\nScanning local music library...")
+
+    local_songs = set()
+
+    local_pairs = set()
+
+    existing_dirs = [directory for directory in MUSIC_DIRS if os.path.isdir(directory)]
+    if not existing_dirs:
+        raise FileNotFoundError(
+            "No music directories found: " + ", ".join(MUSIC_DIRS)
+        )
+
+    extensions = {
+        ".mp3",
+        ".flac",
+        ".m4a",
+        ".aac",
+        ".wav",
+        ".ogg",
+        ".wma",
+        ".opus"
+    }
+
+    count = 0
+
+    for music_dir in existing_dirs:
+        for root, dirs, files in os.walk(music_dir):
+            for filename in files:
+                path = Path(filename)
+                if path.suffix.lower() not in extensions:
+                    continue
+
+                count += 1
+                cleaned = clean_song_name(path.stem)
+                normalized = normalize(cleaned)
+                if normalized:
+                    local_songs.add(normalized)
+
+                # Support both Artist - Song and Song - Artist filenames.
+                parts = re.split(r"\s+-\s+", cleaned, maxsplit=1)
+                if len(parts) == 2:
+                    left, right = (normalize(part) for part in parts)
+                    if left and right:
+                        local_pairs.add((left, right))
+                        local_pairs.add((right, left))
+
+    print(f"Found {count} local audio files in {len(existing_dirs)} directories")
+
+    return local_songs, local_pairs
+
+
+# ============================================================
+# Check whether song already exists
+# ============================================================
+
+def song_exists(
+        artist,
+        song,
+        local_songs,
+        local_pairs
+):
+
+    artist_key = normalize(artist)
+
+    song_key = normalize(clean_song_name(song))
+
+    if not artist_key or not song_key:
+        return False
+
+    # Match artist + song filename
+
+    if (artist_key, song_key) in local_pairs:
+        return True
+
+    # Match common filename formats
+
+    combined = artist_key + song_key
+
+    for local in local_songs:
+
+        if local == combined:
             return True
 
     return False
 
 
-# =========================
-# build artist index
-# =========================
-def build_artist_index(soup):
-    index = {}
+# ============================================================
+# Main
+# ============================================================
 
-    for a in soup.select("tr td.text a"):
-        name = norm(a.get_text())
-        link = a.get("href")
-
-        if name and link:
-            index[name] = link
-
-    print(f"🎯 Artist index built: {len(index)}")
-    return index
-
-
-# =========================
-# 获取歌曲（🔥缓存兼容版）
-# =========================
-def get_spotify_songs(artist, artist_index):
-    target = norm(artist)
-    link = artist_index.get(target)
-
-    print("DEBUG link =", link)
-
-    if not link:
-        print(f"❌ NOT FOUND: {artist}")
-        not_found_artists.append(artist)
-        return []
-
-    base = artist_key(artist)
-
-    # 兼容旧缓存 + 新缓存
-    candidates = [
-        f"{base}_spotify.html",
-        f"{base}_spotify_songs.html"
-    ]
-
-    html = None
-
-    for name in candidates:
-        path = os.path.join(CACHE_DIR, name)
-        if os.path.exists(path):
-            print(f"[CACHE] {name}")
-            html = open(path, "r", encoding="utf-8").read()
-            break
-
-    # 没命中才抓
-    if html is None:
-        url = "https://kworb.net" + link
-        print("[FETCH]", artist)
-
-        html = requests.get(url, headers=HEADERS).text
-
-        path = os.path.join(CACHE_DIR, candidates[0])
-        with open(path, "w", encoding="utf-8") as f:
-            f.write(html)
-
-    soup = BeautifulSoup(html, "html.parser")
-
-    songs = [
-        clean_title(a.get_text(strip=True))
-        for a in soup.select("tr td:first-child a")[:3]
-    ]
-
-    return songs
-
-
-# =========================
-# load artists
-# =========================
-def load_artists():
-    with open("all_artists.txt", "r", encoding="utf-8") as f:
-        return [x.strip() for x in f if x.strip()]
-
-
-# =========================
-# main
-# =========================
 def main():
-    print("\n📥 load spotify artists (once)")
 
-    html = get_cache(
-        "spotify_artists.html",
-        "https://kworb.net/spotify/artists.html"
+    print("=" * 60)
+    print("Kworb Artist Song Scraper")
+    print("=" * 60)
+
+    artist_input = input(
+        "Artist name (leave blank to use the artist list): "
+    ).strip()
+
+    if artist_input:
+        artists = [artist_input]
+        print(f"Artist entered: {artist_input}")
+    else:
+        artists = load_artists(ARTISTS_FILE)
+        print(f"Loaded {len(artists)} artists from {ARTISTS_FILE}")
+        if ARTIST_LIMIT is not None:
+            artists = artists[:ARTIST_LIMIT]
+
+    top_n_input = input(
+        f"Number of top songs to fetch [{TOP_N}]: "
+    ).strip()
+    if top_n_input:
+        try:
+            top_n = int(top_n_input)
+            if top_n < 1:
+                raise ValueError
+        except ValueError:
+            raise ValueError("Song count must be a positive integer")
+    else:
+        top_n = TOP_N
+
+    print(f"Top N songs  : {top_n}")
+    print(f"Music folders: {', '.join(MUSIC_DIRS)}")
+
+    # --------------------------------------------------------
+    # Load artists
+    # --------------------------------------------------------
+
+    print(f"\nArtists to process: {len(artists)}")
+
+    print(
+        f"Artists to process: {len(artists)}"
     )
 
-    soup = BeautifulSoup(html, "html.parser")
-    artist_index = build_artist_index(soup)
+    # --------------------------------------------------------
+    # Load blacklist
+    # --------------------------------------------------------
 
-    artists = load_artists()
-    local_index = build_music_index()
-    bad_list = load_bad_words()
+    filtering_rules = load_bad_words()
 
-    print(f"\n🎤 artists: {len(artists)}")
-    print(f"📀 local songs: {len(local_index)}")
-    print(f"🚫 bad rules: {len(bad_list)}")
+    # --------------------------------------------------------
+    # Scan local music
+    # --------------------------------------------------------
 
-    tbd = []
+    local_songs, local_pairs = load_local_songs()
 
-    for artist in artists:
-        print(f"\n🎧 {artist}")
+    # --------------------------------------------------------
+    # Load Kworb artist index
+    # --------------------------------------------------------
 
-        songs = get_spotify_songs(artist, artist_index)
+    print("\nLoading Kworb artist index...")
 
-        for s in songs:
-            key = norm(s.split(" - ")[-1])
+    artist_urls = load_artist_urls()
 
-            # 本地存在
-            if key in local_index:
+    print(
+        f"Artists found on Kworb: {len(artist_urls)}"
+    )
+
+    # --------------------------------------------------------
+    # Process artists
+    # --------------------------------------------------------
+
+    results = set()
+    result_keys = set()
+    not_found_artists = []
+
+    stats = {
+        "processed": 0,
+        "not_found": 0,
+        "songs_found": 0,
+        "existing": 0,
+        "non_english": 0,
+        "blacklisted": 0,
+        "added": 0,
+        "errors": 0
+    }
+
+    for index, artist in enumerate(
+            artists,
+            start=1
+    ):
+
+        print(
+            f"\n[{index}/{len(artists)}] {artist}"
+        )
+
+        stats["processed"] += 1
+
+        # ----------------------------------------------------
+        # English artist filter
+        # ----------------------------------------------------
+
+        if not is_english(artist):
+
+            print("  Skip: non-English artist")
+
+            stats["non_english"] += 1
+
+            continue
+
+        artist_rule = blacklist_reason(artist, "", filtering_rules)
+        if artist_rule == "artist":
+            print("  Skip: blacklisted artist")
+            stats["blacklisted"] += 1
+            continue
+
+        # ----------------------------------------------------
+        # Find artist URL
+        # ----------------------------------------------------
+
+        artist_url = artist_urls.get(
+            normalize(artist)
+        )
+
+        if not artist_url:
+
+            print("  Artist not found on Kworb")
+
+            stats["not_found"] += 1
+            not_found_artists.append(artist)
+
+            continue
+
+        songs_url = get_songs_url(
+            artist_url
+        )
+
+        # ----------------------------------------------------
+        # Download / load songs page
+        # ----------------------------------------------------
+
+        try:
+
+            artist_cache_key = re.sub(r"\W+", "_", artist.lower()).strip("_")
+            html = get_html(
+                songs_url,
+                (
+                    f"{artist_cache_key}_spotify.html",
+                    f"{artist_cache_key}_spotify_songs.html",
+                ),
+            )
+
+            songs = parse_top_n(
+                html,
+                top_n
+            )
+
+        except Exception as e:
+
+            print(
+                f"  Error: {e}"
+            )
+
+            stats["errors"] += 1
+
+            continue
+
+        print(
+            f"  Songs retrieved: {len(songs)}"
+        )
+
+        stats["songs_found"] += len(songs)
+
+        # ----------------------------------------------------
+        # Filter songs
+        # ----------------------------------------------------
+
+        for song in songs:
+
+            if not is_english(song):
+
+                stats["non_english"] += 1
+
                 continue
 
-            # bad filter
-            if is_bad(artist, s, bad_list):
-                print(f"SKIP (bad): {s}")
+            reason = blacklist_reason(artist, song, filtering_rules)
+            if reason:
+                print(f"  Blacklisted ({reason}): {song}")
+                stats["blacklisted"] += 1
                 continue
 
-            if " - " in s:
-                line = s
-            else:
-                line = f"{artist} - {s}"
+            # Check local library
 
-            tbd.append(line)
+            if song_exists(
+                    artist,
+                    song,
+                    local_songs,
+                    local_pairs
+            ):
 
-    # 去重 + 排序
-    unique = {}
-    for x in tbd:
-        k = x.lower()
-        if k not in unique:
-            unique[k] = x
+                print(
+                    f"  Existing: {song}"
+                )
 
-    final = sorted(unique.values(), key=lambda x: x.lower())
+                stats["existing"] += 1
 
-    if final:
-        with open("tbd.txt", "w", encoding="utf-8") as f:
-            for x in final:
-                f.write(x + "\n")
+                continue
 
-        print("\n📄 tbd.txt generated")
-    else:
-        print("\n✅ nothing to write")
+            line = f"{artist} - {song}"
+
+            # Deduplicate
+
+            key = normalize(line)
+
+            if not key:
+                continue
+
+            if key in result_keys:
+                continue
+
+            results.add(line)
+            result_keys.add(key)
+
+            print(
+                f"  + {song}"
+            )
+
+            stats["added"] += 1
+
+    # --------------------------------------------------------
+    # Write output
+    # --------------------------------------------------------
+
+    sorted_results = sorted(
+        results,
+        key=lambda x: normalize(x)
+    )
+
+    with open(
+            OUTPUT_FILE,
+            "w",
+            encoding="utf-8"
+    ) as f:
+
+        for line in sorted_results:
+
+            f.write(
+                line + "\n"
+            )
 
     with open("not_found.txt", "w", encoding="utf-8") as f:
-        for artist in sorted(set(not_found_artists)):
+        for artist in sorted(set(not_found_artists), key=normalize):
             f.write(artist + "\n")
 
-        print(f"\n📝 saved {len(set(not_found_artists))} artists to not_found.txt")
+    # --------------------------------------------------------
+    # Summary
+    # --------------------------------------------------------
+
+    print("\n")
+    print("=" * 60)
+    print("Finished")
+    print("=" * 60)
+
+    for key, value in stats.items():
+
+        print(
+            f"{key:15}: {value}"
+        )
+
+    print("-" * 60)
+
+    print(
+        f"Output: {OUTPUT_FILE}"
+    )
+
+    print(
+        f"Total new songs: {len(sorted_results)}"
+    )
 
 
 if __name__ == "__main__":
+
     main()
