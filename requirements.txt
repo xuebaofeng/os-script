@@ -6,3 +6,4 @@ langdetect
 pypinyin
 requests
 beautifulsoup4
+mutagen
