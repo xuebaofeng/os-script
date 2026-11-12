@@ -40,12 +40,12 @@ BAD_WORDS_FILE = "bad_words.txt"  # All filtering rules are kept in this file
 # 200 = first 200 artists
 # None = all artists
 
-ARTIST_LIMIT = 1000
+ARTIST_LIMIT = 10
 
 
 # Number of top songs per artist
 
-TOP_N = 2
+TOP_N = 10
 
 
 # Delay between requests (seconds)

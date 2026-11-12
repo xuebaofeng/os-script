@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 from pathlib import Path
 
 from google.auth.exceptions import RefreshError
@@ -110,12 +111,11 @@ def get_uploaded_videos(youtube):
 
 
 def source_path_from_description(description):
-    path_labels = ("Original Path:", "Full local path:")
     for line in (description or "").splitlines():
         stripped_line = line.strip()
-        for label in path_labels:
-            if stripped_line.casefold().startswith(label.casefold()):
-                return stripped_line[len(label):].strip()
+        label = "Full local path:"
+        if stripped_line.casefold().startswith(label.casefold()):
+            return stripped_line[len(label):].strip()
     return None
 
 
@@ -137,11 +137,12 @@ def is_in_target_folder(source_path):
 
 
 def ensure_title_phrase(title):
-    if TITLE_PHRASE.casefold() in title.casefold():
-        return title
-
-    prefix = f"{TITLE_PHRASE} | "
-    return prefix + title[:100 - len(prefix)]
+    title = (title or "").strip()
+    remainder = re.sub(re.escape(TITLE_PHRASE), "", title, flags=re.IGNORECASE)
+    remainder = re.sub(r"\s*\|\s*", " | ", remainder)
+    remainder = re.sub(r"\s+", " ", remainder).strip(" |-").strip()
+    normalized = TITLE_PHRASE if not remainder else f"{TITLE_PHRASE} | {remainder}"
+    return normalized[:100].rstrip()
 
 
 def find_playlist(youtube, title):
@@ -294,16 +295,10 @@ def main():
         video_id = video["id"]
         current_title = video.get("snippet", {}).get("title", "")
         updated_title = ensure_title_phrase(current_title)
-        current_visibility = video.get("status", {}).get(
-            "privacyStatus",
-            "unknown"
-        )
-        needs_visibility_update = current_visibility != "public"
 
         print()
         print(f"Video ID: {video_id}")
         print(f"Title: {current_title}")
-        print(f"Visibility: {current_visibility}")
 
         if video_id in playlist_video_ids:
             print("Playlist: already contains video.")
@@ -315,10 +310,15 @@ def main():
             print("Playlist: added video.")
 
         if updated_title == current_title:
-            print("Title: already contains required phrase.")
+            print("Title: already normalized.")
         elif args.dry_run:
             print(f"Title: would change to {updated_title}")
 
+        current_visibility = video.get("status", {}).get(
+            "privacyStatus",
+            "unknown"
+        )
+        needs_visibility_update = current_visibility != "public"
         if needs_visibility_update and args.dry_run:
             print("Visibility: would change to public.")
         elif not needs_visibility_update:
