@@ -35,7 +35,7 @@ SUPPORTED = {
 }
 
 REQUEST_INTERVAL = 1.0
-DEFAULT_WORKERS = 4
+DEFAULT_WORKERS = 10
 NORMALIZE_EXTENSIONS = {".mp3", ".opus"}
 TARGET_I = -16.0
 TARGET_TP = -1.5
@@ -43,7 +43,7 @@ TARGET_LRA = 11.0
 LOUDNESS_TOLERANCE = 1.0
 TRUE_PEAK_TOLERANCE = 0.5
 LRA_TOLERANCE = 1.0
-LYRICS_RECHECK_SECONDS = 30 * 24 * 60 * 60
+NEGATIVE_LYRICS_CACHE_SECONDS = 30 * 24 * 60 * 60
 SCAN_DB_PATH = MUSIC_ROOT / ".music_processor.db"
 LEGACY_SCAN_STATE_PATH = MUSIC_ROOT / ".music_processor_scan.json"
 
@@ -199,10 +199,13 @@ def load_cached_lyrics(meta):
         finally:
             connection.close()
 
-    if not row or time.time() - row[2] >= LYRICS_RECHECK_SECONDS:
+    if not row:
         return False, None
+    age = time.time() - row[2]
     if not row[3]:
-        return True, None
+        if 0 <= age < NEGATIVE_LYRICS_CACHE_SECONDS:
+            return True, None
+        return False, None
     return True, {
         "plainLyrics": row[0] or "",
         "syncedLyrics": row[1] or ""
@@ -322,14 +325,10 @@ def relative_key(path):
     return str(path.relative_to(MUSIC_ROOT))
 
 
-def lyrics_check_is_fresh(entry, mtime_ns, now):
+def lyrics_already_present(entry, mtime_ns):
     if not entry or entry.get("mtime_ns") != mtime_ns:
         return False
-    checked_at = entry.get("lyrics_checked_at")
-    if not isinstance(checked_at, (int, float)):
-        return False
-    age = now - checked_at
-    return 0 <= age < LYRICS_RECHECK_SECONDS
+    return entry.get("result") in {"success", "skipped"}
 
 
 def get_session():
@@ -381,16 +380,38 @@ def stop_active_ffmpeg():
 def analyze_loudness(path):
     command = [
         "ffmpeg", "-hide_banner", "-nostats", "-i", str(path),
+        "-map", "0:a:0", "-vn", "-sn", "-dn",
         "-af",
         f"loudnorm=I={TARGET_I}:TP={TARGET_TP}:LRA={TARGET_LRA}:print_format=json",
         "-f", "null", "-"
     ]
     return_code, stderr = run_ffmpeg(command)
     output = stderr.decode("utf-8", errors="ignore")
-    match = re.search(r"\{[\s\S]*\}", output)
-    if return_code != 0 or not match:
-        raise RuntimeError(f"FFmpeg 响度分析失败：{output[-1000:]}")
-    return json.loads(match.group(0))
+    if return_code != 0:
+        raise RuntimeError(
+            f"FFmpeg 响度分析失败（退出码 {return_code}）：\n{output[-3000:]}"
+        )
+
+    required_fields = {
+        "input_i",
+        "input_tp",
+        "input_lra",
+        "input_thresh",
+        "target_offset"
+    }
+    decoder = json.JSONDecoder()
+    for match in reversed(list(re.finditer(r"\{", output))):
+        try:
+            report, _ = decoder.raw_decode(output[match.start():])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(report, dict) and required_fields.issubset(report):
+            return report
+
+    raise RuntimeError(
+        "FFmpeg 未生成有效的 loudnorm 测量报告：\n"
+        f"{output[-3000:]}"
+    )
 
 
 def normalize_audio(path):
@@ -439,6 +460,7 @@ def normalize_audio(path):
     )
     command = [
         "ffmpeg", "-y", "-hide_banner", "-i", str(path),
+        "-map", "0:a:0", "-vn", "-sn", "-dn",
         "-map_metadata", "0", "-af", filter_value,
         *codec_args, str(temporary_path)
     ]
@@ -580,11 +602,18 @@ def get_lyrics(meta, use_cache=True):
     if use_cache:
         cached, cached_data = load_cached_lyrics(meta)
         if cached:
-            logger.info(
-                "使用数据库歌词缓存：%s - %s",
-                meta["artist"],
-                meta["title"]
-            )
+            if cached_data is None:
+                logger.info(
+                    "数据库记录云端暂无歌词，30 天内跳过查询：%s - %s",
+                    meta["artist"],
+                    meta["title"]
+                )
+            else:
+                logger.info(
+                    "使用数据库歌词缓存：%s - %s",
+                    meta["artist"],
+                    meta["title"]
+                )
             return cached_data
 
     params = {
@@ -851,6 +880,7 @@ def process_file(path, overwrite=False, normalize=True, check_lyrics=True):
             return "skipped"
 
         if not check_lyrics:
+            logger.info("歌词检查跳过（此前已有歌词）：%s", path)
             return "skipped"
 
         if (
@@ -1015,7 +1045,6 @@ def main():
     if imported_lrc_count:
         print(f"从本地 LRC 导入歌词：{imported_lrc_count} 首")
     scan_state = load_scan_state(scan_db)
-    now = time.time()
     work_items = []
     missing_files = []
     cached_count = 0
@@ -1030,23 +1059,30 @@ def main():
             continue
 
         volume_pending = entry.get("volume_mtime_ns") != mtime_ns
-        lyrics_fresh = lyrics_check_is_fresh(entry, mtime_ns, now)
-        if lyrics_fresh and not volume_pending:
+        lyrics_present = lyrics_already_present(entry, mtime_ns)
+        if lyrics_present and not volume_pending:
             cached_count += 1
-            if entry.get("result") == "missing":
-                missing_files.append(key)
+            logger.info(
+                "整首跳过（文件未修改，已有歌词且音量已检查）：%s",
+                path
+            )
             continue
+
+        if not volume_pending:
+            logger.info("音量检查跳过（文件修改时间未变）：%s", path)
+        if lyrics_present:
+            logger.info("歌词检查跳过（此前已有歌词）：%s", path)
 
         # Recheck lyrics after 30 days, but analyze loudness only after a
         # modification time change (or when this file has no saved record).
-        work_items.append((path, volume_pending, not lyrics_fresh))
+        work_items.append((path, volume_pending, not lyrics_present))
 
     print()
     print("曲库：", MUSIC_ROOT)
     print("歌词：", LYRICS_ROOT)
     print("歌曲数量：", len(files))
-    print(f"本次需处理：{len(work_items)}，30 天缓存跳过：{cached_count}")
-    print("文件修改时间不变时跳过音量检查；歌词结果缓存 30 天")
+    print(f"本次需处理：{len(work_items)}，已有歌词且状态未变而跳过：{cached_count}")
+    print("音频已有歌词时不查询新歌词；文件修改时间未变时跳过音量检查")
     print()
 
     stats = {
@@ -1107,6 +1143,8 @@ def main():
                     # A failed lookup on a newly changed file must not inherit
                     # a recent check timestamp from its previous contents.
                     entry["lyrics_checked_at"] = None
+                if not check_lyrics:
+                    entry["result"] = previous.get("result", result)
                 scan_state[key] = entry
                 save_scan_result(scan_db, key, entry)
             except OSError:
