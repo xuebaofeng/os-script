@@ -10,6 +10,7 @@ import os
 import subprocess
 import uuid
 import sqlite3
+import copy
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pathlib import Path
@@ -68,6 +69,9 @@ _process_lock = threading.Lock()
 _active_processes = set()
 _stop_event = threading.Event()
 _next_request_at = 0.0
+_lyrics_db_lock = threading.Lock()
+_volume_check_successes = set()
+_volume_success_lock = threading.Lock()
 
 
 def open_scan_db():
@@ -78,9 +82,30 @@ def open_scan_db():
         CREATE TABLE IF NOT EXISTS scan_results (
             path TEXT PRIMARY KEY,
             mtime_ns INTEGER NOT NULL,
+            volume_mtime_ns INTEGER,
             volume_checked_at REAL,
             lyrics_checked_at REAL,
             result TEXT
+        )
+    """)
+    scan_columns = {
+        row[1] for row in connection.execute("PRAGMA table_info(scan_results)")
+    }
+    if "volume_mtime_ns" not in scan_columns:
+        connection.execute(
+            "ALTER TABLE scan_results ADD COLUMN volume_mtime_ns INTEGER"
+        )
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS lyrics_cache (
+            artist_key TEXT NOT NULL,
+            title_key TEXT NOT NULL,
+            artist TEXT NOT NULL,
+            title TEXT NOT NULL,
+            plain_lyrics TEXT,
+            synced_lyrics TEXT,
+            checked_at REAL NOT NULL,
+            found INTEGER NOT NULL,
+            PRIMARY KEY (artist_key, title_key)
         )
     """)
     connection.commit()
@@ -121,12 +146,14 @@ def load_scan_state(connection):
     return {
         row[0]: {
             "mtime_ns": row[1],
-            "volume_checked_at": row[2],
-            "lyrics_checked_at": row[3],
-            "result": row[4]
+            "volume_mtime_ns": row[2],
+            "volume_checked_at": row[3],
+            "lyrics_checked_at": row[4],
+            "result": row[5]
         }
         for row in connection.execute(
-            "SELECT path, mtime_ns, volume_checked_at, lyrics_checked_at, result "
+            "SELECT path, mtime_ns, volume_mtime_ns, volume_checked_at, "
+            "lyrics_checked_at, result "
             "FROM scan_results"
         )
     }
@@ -135,21 +162,160 @@ def load_scan_state(connection):
 def save_scan_result(connection, path, entry):
     connection.execute("""
         INSERT INTO scan_results (
-            path, mtime_ns, volume_checked_at, lyrics_checked_at, result
-        ) VALUES (?, ?, ?, ?, ?)
+            path, mtime_ns, volume_mtime_ns, volume_checked_at,
+            lyrics_checked_at, result
+        ) VALUES (?, ?, ?, ?, ?, ?)
         ON CONFLICT(path) DO UPDATE SET
             mtime_ns=excluded.mtime_ns,
+            volume_mtime_ns=excluded.volume_mtime_ns,
             volume_checked_at=excluded.volume_checked_at,
             lyrics_checked_at=excluded.lyrics_checked_at,
             result=excluded.result
     """, (
         path,
         entry["mtime_ns"],
+        entry.get("volume_mtime_ns"),
         entry.get("volume_checked_at"),
         entry.get("lyrics_checked_at"),
         entry.get("result")
     ))
     connection.commit()
+
+
+def lyrics_cache_key(meta):
+    return meta["artist"].strip().casefold(), meta["title"].strip().casefold()
+
+
+def load_cached_lyrics(meta):
+    artist_key, title_key = lyrics_cache_key(meta)
+    with _lyrics_db_lock:
+        connection = sqlite3.connect(SCAN_DB_PATH, timeout=30)
+        try:
+            row = connection.execute("""
+                SELECT plain_lyrics, synced_lyrics, checked_at, found
+                FROM lyrics_cache
+                WHERE artist_key=? AND title_key=?
+            """, (artist_key, title_key)).fetchone()
+        finally:
+            connection.close()
+
+    if not row or time.time() - row[2] >= LYRICS_RECHECK_SECONDS:
+        return False, None
+    if not row[3]:
+        return True, None
+    return True, {
+        "plainLyrics": row[0] or "",
+        "syncedLyrics": row[1] or ""
+    }
+
+
+def save_cached_lyrics(meta, data):
+    artist_key, title_key = lyrics_cache_key(meta)
+    found = bool(data and (data.get("plainLyrics") or data.get("syncedLyrics")))
+    with _lyrics_db_lock:
+        connection = sqlite3.connect(SCAN_DB_PATH, timeout=30)
+        try:
+            connection.execute("""
+                INSERT INTO lyrics_cache (
+                    artist_key, title_key, artist, title, plain_lyrics,
+                    synced_lyrics, checked_at, found
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(artist_key, title_key) DO UPDATE SET
+                    artist=excluded.artist,
+                    title=excluded.title,
+                    plain_lyrics=excluded.plain_lyrics,
+                    synced_lyrics=excluded.synced_lyrics,
+                    checked_at=excluded.checked_at,
+                    found=excluded.found
+            """, (
+                artist_key,
+                title_key,
+                meta["artist"],
+                meta["title"],
+                (data.get("plainLyrics") or "") if found else "",
+                (data.get("syncedLyrics") or "") if found else "",
+                time.time(),
+                int(found)
+            ))
+            connection.commit()
+        finally:
+            connection.close()
+
+
+def has_positive_lyrics_cache(meta):
+    artist_key, title_key = lyrics_cache_key(meta)
+    with _lyrics_db_lock:
+        connection = sqlite3.connect(SCAN_DB_PATH, timeout=30)
+        try:
+            row = connection.execute("""
+                SELECT found FROM lyrics_cache
+                WHERE artist_key=? AND title_key=?
+            """, (artist_key, title_key)).fetchone()
+            return bool(row and row[0])
+        finally:
+            connection.close()
+
+
+def import_lrc_files():
+    """Import local LRC files into SQLite without replacing positive cache rows."""
+    if not LYRICS_ROOT.is_dir():
+        return 0
+
+    imported = 0
+    audio_extensions = tuple(SUPPORTED)
+    lrc_files = (
+        path for path in LYRICS_ROOT.rglob("*")
+        if path.is_file() and path.suffix.lower() == ".lrc"
+    )
+
+    for lrc_path in lrc_files:
+        try:
+            relative = lrc_path.relative_to(LYRICS_ROOT)
+            audio_path = next(
+                (
+                    MUSIC_ROOT / relative.with_suffix(extension)
+                    for extension in audio_extensions
+                    if (MUSIC_ROOT / relative.with_suffix(extension)).is_file()
+                ),
+                None
+            )
+
+            if audio_path:
+                meta = get_metadata(audio_path)
+            else:
+                artist, title = parse_filename(lrc_path)
+                meta = {
+                    "artist": artist,
+                    "title": title,
+                    "album": "",
+                    "duration": None
+                }
+
+            if not meta or not meta.get("artist") or not meta.get("title"):
+                logger.warning("无法从 LRC 识别艺人和曲名：%s", lrc_path)
+                continue
+            if has_positive_lyrics_cache(meta):
+                continue
+
+            synced = lrc_path.read_text(encoding="utf-8-sig").strip()
+            if not synced:
+                continue
+            plain = re.sub(r"\[\d{1,2}:\d{2}(?:\.\d+)?\]", "", synced)
+            plain = re.sub(
+                r"(?m)^\[(?:ar|ti|al|by|offset|length|re|ve):[^]]*\]\s*$",
+                "",
+                plain,
+                flags=re.IGNORECASE
+            ).strip()
+            save_cached_lyrics(meta, {
+                "plainLyrics": plain,
+                "syncedLyrics": synced
+            })
+            imported += 1
+        except Exception:
+            logger.exception("导入 LRC 失败：%s", lrc_path)
+
+    return imported
 
 
 def relative_key(path):
@@ -278,10 +444,15 @@ def normalize_audio(path):
     ]
 
     try:
+        lyric_snapshot = capture_lyrics_tags(path)
         return_code, stderr = run_ffmpeg(command)
         if return_code != 0:
             output = stderr.decode("utf-8", errors="ignore")
             raise RuntimeError(f"FFmpeg 响度标准化失败：{output[-1000:]}")
+
+        # Restore lyric frames to the temporary output before replacing the
+        # source. If restoration fails, the original audio remains untouched.
+        restore_lyrics_tags(temporary_path, lyric_snapshot)
 
         for attempt in range(5):
             try:
@@ -296,6 +467,49 @@ def normalize_audio(path):
             temporary_path.unlink()
 
     logger.info("完成响度标准化：%s", path.name)
+
+
+def capture_lyrics_tags(path):
+    audio = File(path, easy=False)
+    if audio is None or audio.tags is None:
+        return None
+
+    if path.suffix.lower() == ".mp3":
+        frames = audio.tags.getall("USLT") + audio.tags.getall("SYLT")
+        return {"id3_frames": copy.deepcopy(frames)} if frames else None
+
+    keys = ("\xa9lyr",) if path.suffix.lower() == ".m4a" else (
+        "LYRICS", "UNSYNCEDLYRICS"
+    )
+    values = {
+        key: copy.deepcopy(audio.tags[key])
+        for key in keys
+        if key in audio.tags
+    }
+    return {"values": values} if values else None
+
+
+def restore_lyrics_tags(path, snapshot):
+    if not snapshot:
+        return
+
+    if path.suffix.lower() == ".mp3":
+        tags = ID3(path)
+        tags.delall("USLT")
+        tags.delall("SYLT")
+        for frame in snapshot.get("id3_frames", []):
+            tags.add(frame)
+        tags.save(path, v2_version=3)
+        return
+
+    audio = File(path, easy=False)
+    if audio is None:
+        raise RuntimeError(f"无法打开标准化后的文件以恢复歌词：{path}")
+    if audio.tags is None:
+        audio.add_tags()
+    for key, value in snapshot.get("values", {}).items():
+        audio.tags[key] = value
+    audio.save()
 
 # ==================== 基础处理 ====================
 
@@ -320,6 +534,10 @@ def parse_filename(path):
 
     if " - " in name:
         artist, title = name.split(" - ", 1)
+        return artist.strip(), title.strip()
+
+    if "-" in name:
+        artist, title = name.split("-", 1)
         return artist.strip(), title.strip()
 
     return "", name.strip()
@@ -357,7 +575,17 @@ def get_metadata(path):
 
 # ==================== 歌词查询 ====================
 
-def get_lyrics(meta):
+def get_lyrics(meta, use_cache=True):
+
+    if use_cache:
+        cached, cached_data = load_cached_lyrics(meta)
+        if cached:
+            logger.info(
+                "使用数据库歌词缓存：%s - %s",
+                meta["artist"],
+                meta["title"]
+            )
+            return cached_data
 
     params = {
         "artist_name": meta["artist"],
@@ -370,34 +598,25 @@ def get_lyrics(meta):
     if meta["duration"]:
         params["duration"] = meta["duration"]
 
-    try:
+    # First try the exact lookup. Network and server errors propagate so
+    # transient failures are not stored as a 30-day "no lyrics" result.
+    response = rate_limited_get(
+        f"{API}/api/get",
+        params=params,
+        timeout=20
+    )
 
-        # 第一阶段：精确查询
-        response = rate_limited_get(
-            f"{API}/api/get",
-            params=params,
-            timeout=20
-        )
+    data = None
+    if response.status_code == 200:
+        exact = response.json()
+        if not exact.get("instrumental") and (
+            exact.get("plainLyrics") or exact.get("syncedLyrics")
+        ):
+            data = exact
+    elif response.status_code != 404:
+        response.raise_for_status()
 
-        if response.status_code == 200:
-
-            data = response.json()
-
-            if not data.get("instrumental") and (
-                data.get("plainLyrics")
-                or data.get("syncedLyrics")
-            ):
-                return data
-
-        elif response.status_code == 429:
-
-            logger.warning("API 限流")
-            time.sleep(
-                int(response.headers.get("Retry-After", 10))
-            )
-            return None
-
-        # 第二阶段：搜索候选歌词
+    if data is None:
         response = rate_limited_get(
             f"{API}/api/search",
             params={
@@ -406,13 +625,10 @@ def get_lyrics(meta):
             },
             timeout=20
         )
-
         response.raise_for_status()
-
         candidates = response.json()
 
         for item in candidates:
-
             if item.get("instrumental"):
                 continue
 
@@ -421,37 +637,24 @@ def get_lyrics(meta):
                 meta["title"].lower(),
                 (item.get("trackName") or "").lower()
             ).ratio()
-
             artist_score = SequenceMatcher(
                 None,
                 meta["artist"].lower(),
                 (item.get("artistName") or "").lower()
             ).ratio()
 
-            if title_score < 0.95:
+            if title_score < 0.95 or artist_score < 0.90:
                 continue
-
-            if artist_score < 0.90:
+            if meta["duration"] and item.get("duration") and abs(
+                meta["duration"] - item["duration"]
+            ) > 5:
                 continue
+            if item.get("plainLyrics") or item.get("syncedLyrics"):
+                data = item
+                break
 
-            if meta["duration"] and item.get("duration"):
-
-                if abs(
-                    meta["duration"] - item["duration"]
-                ) > 5:
-                    continue
-
-            if (
-                item.get("plainLyrics")
-                or item.get("syncedLyrics")
-            ):
-                return item
-
-    except requests.RequestException as e:
-
-        logger.error("API 请求失败：%s", e)
-
-    return None
+    save_cached_lyrics(meta, data)
+    return data
 
 
 # ==================== 已有歌词检查 ====================
@@ -574,6 +777,38 @@ def embed_lyrics(path, plain, synced):
         audio.save()
 
 
+def read_embedded_lyrics(path):
+    """Read existing lyric tags for storage in the SQLite lyrics cache."""
+    audio = File(path, easy=False)
+    if audio is None or audio.tags is None:
+        return None
+
+    plain = ""
+    synced = ""
+    if path.suffix.lower() == ".mp3":
+        plain_frames = audio.tags.getall("USLT")
+        if plain_frames:
+            plain = plain_frames[0].text or ""
+
+        lines = []
+        for frame in audio.tags.getall("SYLT"):
+            for text, timestamp in frame.text:
+                minutes, remainder_ms = divmod(int(timestamp), 60_000)
+                seconds = remainder_ms / 1000
+                lines.append(f"[{minutes:02d}:{seconds:05.2f}]{text}")
+        synced = "\n".join(lines)
+    elif path.suffix.lower() == ".m4a":
+        plain = clean(audio.tags.get("\xa9lyr"))
+    else:
+        plain = clean(audio.tags.get("LYRICS") or audio.tags.get("UNSYNCEDLYRICS"))
+
+    if not plain and synced:
+        plain = re.sub(r"\[\d{1,2}:\d{2}(?:\.\d+)?\]", "", synced).strip()
+    if not plain and not synced:
+        return None
+    return {"plainLyrics": plain, "syncedLyrics": synced}
+
+
 # ==================== 保存 LRC ====================
 
 def save_lrc(path, root, synced):
@@ -600,7 +835,7 @@ def save_lrc(path, root, synced):
 
 # ==================== 单曲处理 ====================
 
-def process_file(path, overwrite=False, normalize=True):
+def process_file(path, overwrite=False, normalize=True, check_lyrics=True):
 
     try:
 
@@ -609,14 +844,31 @@ def process_file(path, overwrite=False, normalize=True):
 
         if normalize:
             normalize_audio(path)
+            with _volume_success_lock:
+                _volume_check_successes.add(str(path))
 
         if _stop_event.is_set():
+            return "skipped"
+
+        if not check_lyrics:
             return "skipped"
 
         if (
             has_existing_lyrics(path)
             and not overwrite
         ):
+
+            existing_meta = get_metadata(path)
+            existing_lyrics = None
+            if (
+                existing_meta
+                and existing_meta["artist"]
+                and existing_meta["title"]
+            ):
+                existing_lyrics = read_embedded_lyrics(path)
+                cached, _ = load_cached_lyrics(existing_meta)
+                if existing_lyrics and not cached:
+                    save_cached_lyrics(existing_meta, existing_lyrics)
 
             logger.info(
                 "跳过已有歌词：%s",
@@ -646,7 +898,7 @@ def process_file(path, overwrite=False, normalize=True):
             meta["title"]
         )
 
-        data = get_lyrics(meta)
+        data = get_lyrics(meta, use_cache=not overwrite)
 
         if _stop_event.is_set():
             return "skipped"
@@ -759,6 +1011,9 @@ def main():
     ]
 
     scan_db = open_scan_db()
+    imported_lrc_count = import_lrc_files()
+    if imported_lrc_count:
+        print(f"从本地 LRC 导入歌词：{imported_lrc_count} 首")
     scan_state = load_scan_state(scan_db)
     now = time.time()
     work_items = []
@@ -771,19 +1026,20 @@ def main():
             mtime_ns = path.stat().st_mtime_ns
         except OSError:
             logger.exception("无法读取文件修改时间：%s", path)
-            work_items.append((path, True))
+            work_items.append((path, True, True))
             continue
 
-        if lyrics_check_is_fresh(entry, mtime_ns, now):
+        volume_pending = entry.get("volume_mtime_ns") != mtime_ns
+        lyrics_fresh = lyrics_check_is_fresh(entry, mtime_ns, now)
+        if lyrics_fresh and not volume_pending:
             cached_count += 1
             if entry.get("result") == "missing":
                 missing_files.append(key)
             continue
 
-        same_mtime = entry.get("mtime_ns") == mtime_ns
         # Recheck lyrics after 30 days, but analyze loudness only after a
         # modification time change (or when this file has no saved record).
-        work_items.append((path, not same_mtime))
+        work_items.append((path, volume_pending, not lyrics_fresh))
 
     print()
     print("曲库：", MUSIC_ROOT)
@@ -803,13 +1059,18 @@ def main():
     print(f"并发线程数：{args.workers}")
     executor = ThreadPoolExecutor(max_workers=args.workers)
     futures = {
-        executor.submit(process_file, path, args.overwrite, check_volume):
-            (path, check_volume)
-        for path, check_volume in work_items
+        executor.submit(
+            process_file,
+            path,
+            args.overwrite,
+            check_volume,
+            check_lyrics
+        ): (path, check_volume, check_lyrics)
+        for path, check_volume, check_lyrics in work_items
     }
     try:
         for index, future in enumerate(as_completed(futures), 1):
-            path, check_volume = futures[future]
+            path, check_volume, check_lyrics = futures[future]
             print(f"[{index}/{len(work_items)}] {path.name}")
             try:
                 result = future.result()
@@ -825,17 +1086,27 @@ def main():
                 mtime_ns = path.stat().st_mtime_ns
                 key = relative_key(path)
                 previous = scan_state.get(key, {})
+                with _volume_success_lock:
+                    volume_succeeded = str(path) in _volume_check_successes
                 entry = {
                     "mtime_ns": mtime_ns,
+                    "volume_mtime_ns": (
+                        mtime_ns if check_volume and volume_succeeded
+                        else previous.get("volume_mtime_ns")
+                    ),
                     "volume_checked_at": (
-                        time.time() if check_volume
+                        time.time() if check_volume and volume_succeeded
                         else previous.get("volume_checked_at")
                     ),
                     "lyrics_checked_at": previous.get("lyrics_checked_at"),
                     "result": result
                 }
-                if result in {"success", "skipped", "missing"}:
+                if check_lyrics and result in {"success", "skipped", "missing"}:
                     entry["lyrics_checked_at"] = time.time()
+                elif check_lyrics and previous.get("mtime_ns") != mtime_ns:
+                    # A failed lookup on a newly changed file must not inherit
+                    # a recent check timestamp from its previous contents.
+                    entry["lyrics_checked_at"] = None
                 scan_state[key] = entry
                 save_scan_result(scan_db, key, entry)
             except OSError:
