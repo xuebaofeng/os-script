@@ -41,6 +41,8 @@ TARGET_LRA = 11.0
 LOUDNESS_TOLERANCE = 1.0
 TRUE_PEAK_TOLERANCE = 0.5
 LRA_TOLERANCE = 1.0
+LYRICS_RECHECK_SECONDS = 30 * 24 * 60 * 60
+SCAN_STATE_PATH = MUSIC_ROOT / ".music_processor_scan.json"
 
 # ==================== 日志 ====================
 
@@ -60,7 +62,51 @@ logger = logging.getLogger(__name__)
 
 _thread_local = threading.local()
 _request_lock = threading.Lock()
+_process_lock = threading.Lock()
+_active_processes = set()
+_stop_event = threading.Event()
 _next_request_at = 0.0
+_scan_state_lock = threading.Lock()
+
+
+def load_scan_state():
+    try:
+        with SCAN_STATE_PATH.open("r", encoding="utf-8") as state_file:
+            state = json.load(state_file)
+        return state if isinstance(state, dict) else {}
+    except FileNotFoundError:
+        return {}
+    except (OSError, json.JSONDecodeError) as error:
+        logger.warning("无法读取扫描记录，将重新检查：%s", error)
+        return {}
+
+
+def save_scan_state(state):
+    temporary_path = SCAN_STATE_PATH.with_suffix(".json.tmp")
+    try:
+        with temporary_path.open("w", encoding="utf-8") as state_file:
+            json.dump(state, state_file, ensure_ascii=False, indent=2)
+        os.replace(temporary_path, SCAN_STATE_PATH)
+    except OSError:
+        logger.exception("保存扫描记录失败：%s", SCAN_STATE_PATH)
+        try:
+            temporary_path.unlink(missing_ok=True)
+        except OSError:
+            pass
+
+
+def relative_key(path):
+    return str(path.relative_to(MUSIC_ROOT))
+
+
+def lyrics_check_is_fresh(entry, mtime_ns, now):
+    if not entry or entry.get("mtime_ns") != mtime_ns:
+        return False
+    checked_at = entry.get("lyrics_checked_at")
+    if not isinstance(checked_at, (int, float)):
+        return False
+    age = now - checked_at
+    return 0 <= age < LYRICS_RECHECK_SECONDS
 
 
 def get_session():
@@ -84,6 +130,31 @@ def rate_limited_get(url, **kwargs):
     return get_session().get(url, **kwargs)
 
 
+def run_ffmpeg(command):
+    """Run FFmpeg while allowing Ctrl+C in the main thread to stop it."""
+    process = subprocess.Popen(
+        command,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE
+    )
+    with _process_lock:
+        _active_processes.add(process)
+    try:
+        _, stderr = process.communicate()
+        return process.returncode, stderr
+    finally:
+        with _process_lock:
+            _active_processes.discard(process)
+
+
+def stop_active_ffmpeg():
+    with _process_lock:
+        processes = list(_active_processes)
+    for process in processes:
+        if process.poll() is None:
+            process.terminate()
+
+
 def analyze_loudness(path):
     command = [
         "ffmpeg", "-hide_banner", "-nostats", "-i", str(path),
@@ -91,15 +162,10 @@ def analyze_loudness(path):
         f"loudnorm=I={TARGET_I}:TP={TARGET_TP}:LRA={TARGET_LRA}:print_format=json",
         "-f", "null", "-"
     ]
-    result = subprocess.run(
-        command,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.PIPE,
-        check=False
-    )
-    output = result.stderr.decode("utf-8", errors="ignore")
+    return_code, stderr = run_ffmpeg(command)
+    output = stderr.decode("utf-8", errors="ignore")
     match = re.search(r"\{[\s\S]*\}", output)
-    if result.returncode != 0 or not match:
+    if return_code != 0 or not match:
         raise RuntimeError(f"FFmpeg 响度分析失败：{output[-1000:]}")
     return json.loads(match.group(0))
 
@@ -155,14 +221,9 @@ def normalize_audio(path):
     ]
 
     try:
-        result = subprocess.run(
-            command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.PIPE,
-            check=False
-        )
-        if result.returncode != 0:
-            output = result.stderr.decode("utf-8", errors="ignore")
+        return_code, stderr = run_ffmpeg(command)
+        if return_code != 0:
+            output = stderr.decode("utf-8", errors="ignore")
             raise RuntimeError(f"FFmpeg 响度标准化失败：{output[-1000:]}")
 
         for attempt in range(5):
@@ -486,8 +547,14 @@ def process_file(path, overwrite=False, normalize=True):
 
     try:
 
+        if _stop_event.is_set():
+            return "skipped"
+
         if normalize:
             normalize_audio(path)
+
+        if _stop_event.is_set():
+            return "skipped"
 
         if (
             has_existing_lyrics(path)
@@ -523,6 +590,9 @@ def process_file(path, overwrite=False, normalize=True):
         )
 
         data = get_lyrics(meta)
+
+        if _stop_event.is_set():
+            return "skipped"
 
         if not data:
 
@@ -631,11 +701,38 @@ def main():
         ).parts
     ]
 
+    scan_state = load_scan_state()
+    now = time.time()
+    work_items = []
+    missing_files = []
+    cached_count = 0
+    for path in files:
+        key = relative_key(path)
+        entry = scan_state.get(key, {})
+        try:
+            mtime_ns = path.stat().st_mtime_ns
+        except OSError:
+            logger.exception("无法读取文件修改时间：%s", path)
+            work_items.append((path, True))
+            continue
+
+        if lyrics_check_is_fresh(entry, mtime_ns, now):
+            cached_count += 1
+            if entry.get("result") == "missing":
+                missing_files.append(key)
+            continue
+
+        same_mtime = entry.get("mtime_ns") == mtime_ns
+        # Recheck lyrics after 30 days, but analyze loudness only after a
+        # modification time change (or when this file has no saved record).
+        work_items.append((path, not same_mtime))
+
     print()
     print("曲库：", MUSIC_ROOT)
     print("歌词：", LYRICS_ROOT)
     print("歌曲数量：", len(files))
-    print("响度标准化：默认开启（已达标的 MP3/Opus 会跳过）")
+    print(f"本次需处理：{len(work_items)}，30 天缓存跳过：{cached_count}")
+    print("文件修改时间不变时跳过音量检查；歌词结果缓存 30 天")
     print()
 
     stats = {
@@ -645,20 +742,17 @@ def main():
         "failed": 0
     }
 
-    missing_files = []
-
     print(f"并发线程数：{args.workers}")
-    with ThreadPoolExecutor(max_workers=args.workers) as executor:
-        futures = {
-            executor.submit(
-                process_file, path, args.overwrite, True
-            ): path
-            for path in files
-        }
-
+    executor = ThreadPoolExecutor(max_workers=args.workers)
+    futures = {
+        executor.submit(process_file, path, args.overwrite, check_volume):
+            (path, check_volume)
+        for path, check_volume in work_items
+    }
+    try:
         for index, future in enumerate(as_completed(futures), 1):
-            path = futures[future]
-            print(f"[{index}/{len(files)}] {path.name}")
+            path, check_volume = futures[future]
+            print(f"[{index}/{len(work_items)}] {path.name}")
             try:
                 result = future.result()
             except Exception:
@@ -668,6 +762,38 @@ def main():
             stats[result] += 1
             if result == "missing":
                 missing_files.append(str(path.relative_to(MUSIC_ROOT)))
+
+            try:
+                mtime_ns = path.stat().st_mtime_ns
+                key = relative_key(path)
+                with _scan_state_lock:
+                    previous = scan_state.get(key, {})
+                    entry = {
+                        "mtime_ns": mtime_ns,
+                        "volume_checked_at": (
+                            time.time() if check_volume
+                            else previous.get("volume_checked_at")
+                        ),
+                        "lyrics_checked_at": previous.get("lyrics_checked_at"),
+                        "result": result
+                    }
+                    if result in {"success", "skipped", "missing"}:
+                        entry["lyrics_checked_at"] = time.time()
+                    scan_state[key] = entry
+                    save_scan_state(scan_state)
+            except OSError:
+                logger.exception("无法更新扫描记录：%s", path)
+    except KeyboardInterrupt:
+        print("\n收到 Ctrl+C，正在取消排队任务并停止 FFmpeg…")
+        _stop_event.set()
+        for future in futures:
+            future.cancel()
+        stop_active_ffmpeg()
+        executor.shutdown(wait=True, cancel_futures=True)
+        print("程序已停止。")
+        return
+    else:
+        executor.shutdown(wait=True)
 
     # 保存未找到歌词的歌曲
     missing_path = MUSIC_ROOT / "missing.txt"
