@@ -9,6 +9,7 @@ import json
 import os
 import subprocess
 import uuid
+import sqlite3
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from pathlib import Path
@@ -42,7 +43,8 @@ LOUDNESS_TOLERANCE = 1.0
 TRUE_PEAK_TOLERANCE = 0.5
 LRA_TOLERANCE = 1.0
 LYRICS_RECHECK_SECONDS = 30 * 24 * 60 * 60
-SCAN_STATE_PATH = MUSIC_ROOT / ".music_processor_scan.json"
+SCAN_DB_PATH = MUSIC_ROOT / ".music_processor.db"
+LEGACY_SCAN_STATE_PATH = MUSIC_ROOT / ".music_processor_scan.json"
 
 # ==================== 日志 ====================
 
@@ -66,33 +68,88 @@ _process_lock = threading.Lock()
 _active_processes = set()
 _stop_event = threading.Event()
 _next_request_at = 0.0
-_scan_state_lock = threading.Lock()
 
 
-def load_scan_state():
-    try:
-        with SCAN_STATE_PATH.open("r", encoding="utf-8") as state_file:
-            state = json.load(state_file)
-        return state if isinstance(state, dict) else {}
-    except FileNotFoundError:
-        return {}
-    except (OSError, json.JSONDecodeError) as error:
-        logger.warning("无法读取扫描记录，将重新检查：%s", error)
-        return {}
+def open_scan_db():
+    connection = sqlite3.connect(SCAN_DB_PATH, timeout=30)
+    connection.execute("PRAGMA busy_timeout=30000")
+    connection.execute("PRAGMA journal_mode=WAL")
+    connection.execute("""
+        CREATE TABLE IF NOT EXISTS scan_results (
+            path TEXT PRIMARY KEY,
+            mtime_ns INTEGER NOT NULL,
+            volume_checked_at REAL,
+            lyrics_checked_at REAL,
+            result TEXT
+        )
+    """)
+    connection.commit()
 
-
-def save_scan_state(state):
-    temporary_path = SCAN_STATE_PATH.with_suffix(".json.tmp")
-    try:
-        with temporary_path.open("w", encoding="utf-8") as state_file:
-            json.dump(state, state_file, ensure_ascii=False, indent=2)
-        os.replace(temporary_path, SCAN_STATE_PATH)
-    except OSError:
-        logger.exception("保存扫描记录失败：%s", SCAN_STATE_PATH)
+    if LEGACY_SCAN_STATE_PATH.is_file():
         try:
-            temporary_path.unlink(missing_ok=True)
-        except OSError:
-            pass
+            with LEGACY_SCAN_STATE_PATH.open("r", encoding="utf-8") as state_file:
+                legacy_state = json.load(state_file)
+            for path, entry in legacy_state.items():
+                connection.execute("""
+                    INSERT OR IGNORE INTO scan_results (
+                        path, mtime_ns, volume_checked_at,
+                        lyrics_checked_at, result
+                    ) VALUES (?, ?, ?, ?, ?)
+                """, (
+                    path,
+                    entry.get("mtime_ns"),
+                    entry.get("volume_checked_at"),
+                    entry.get("lyrics_checked_at"),
+                    entry.get("result")
+                ))
+            connection.commit()
+            logger.info("已将旧 JSON 扫描记录导入 SQLite")
+        except (
+            OSError,
+            json.JSONDecodeError,
+            AttributeError,
+            TypeError,
+            sqlite3.Error
+        ):
+            connection.rollback()
+            logger.exception("导入旧 JSON 扫描记录失败")
+
+    return connection
+
+
+def load_scan_state(connection):
+    return {
+        row[0]: {
+            "mtime_ns": row[1],
+            "volume_checked_at": row[2],
+            "lyrics_checked_at": row[3],
+            "result": row[4]
+        }
+        for row in connection.execute(
+            "SELECT path, mtime_ns, volume_checked_at, lyrics_checked_at, result "
+            "FROM scan_results"
+        )
+    }
+
+
+def save_scan_result(connection, path, entry):
+    connection.execute("""
+        INSERT INTO scan_results (
+            path, mtime_ns, volume_checked_at, lyrics_checked_at, result
+        ) VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(path) DO UPDATE SET
+            mtime_ns=excluded.mtime_ns,
+            volume_checked_at=excluded.volume_checked_at,
+            lyrics_checked_at=excluded.lyrics_checked_at,
+            result=excluded.result
+    """, (
+        path,
+        entry["mtime_ns"],
+        entry.get("volume_checked_at"),
+        entry.get("lyrics_checked_at"),
+        entry.get("result")
+    ))
+    connection.commit()
 
 
 def relative_key(path):
@@ -701,7 +758,8 @@ def main():
         ).parts
     ]
 
-    scan_state = load_scan_state()
+    scan_db = open_scan_db()
+    scan_state = load_scan_state(scan_db)
     now = time.time()
     work_items = []
     missing_files = []
@@ -766,21 +824,20 @@ def main():
             try:
                 mtime_ns = path.stat().st_mtime_ns
                 key = relative_key(path)
-                with _scan_state_lock:
-                    previous = scan_state.get(key, {})
-                    entry = {
-                        "mtime_ns": mtime_ns,
-                        "volume_checked_at": (
-                            time.time() if check_volume
-                            else previous.get("volume_checked_at")
-                        ),
-                        "lyrics_checked_at": previous.get("lyrics_checked_at"),
-                        "result": result
-                    }
-                    if result in {"success", "skipped", "missing"}:
-                        entry["lyrics_checked_at"] = time.time()
-                    scan_state[key] = entry
-                    save_scan_state(scan_state)
+                previous = scan_state.get(key, {})
+                entry = {
+                    "mtime_ns": mtime_ns,
+                    "volume_checked_at": (
+                        time.time() if check_volume
+                        else previous.get("volume_checked_at")
+                    ),
+                    "lyrics_checked_at": previous.get("lyrics_checked_at"),
+                    "result": result
+                }
+                if result in {"success", "skipped", "missing"}:
+                    entry["lyrics_checked_at"] = time.time()
+                scan_state[key] = entry
+                save_scan_result(scan_db, key, entry)
             except OSError:
                 logger.exception("无法更新扫描记录：%s", path)
     except KeyboardInterrupt:
@@ -790,10 +847,13 @@ def main():
             future.cancel()
         stop_active_ffmpeg()
         executor.shutdown(wait=True, cancel_futures=True)
+        scan_db.close()
         print("程序已停止。")
         return
     else:
         executor.shutdown(wait=True)
+
+    scan_db.close()
 
     # 保存未找到歌词的歌曲
     missing_path = MUSIC_ROOT / "missing.txt"
