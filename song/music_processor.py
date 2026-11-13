@@ -45,6 +45,20 @@ LRA_TOLERANCE = 1.0
 NEGATIVE_LYRICS_CACHE_SECONDS = 30 * 24 * 60 * 60
 SCAN_DB_PATH = MUSIC_ROOT / ".music_processor.db"
 LEGACY_SCAN_STATE_PATH = MUSIC_ROOT / ".music_processor_scan.json"
+PROFANITY_PATTERNS = (
+    re.compile(
+        r"操你妈的|去他妈的|操你妈|他妈的|你妈的|傻逼|王八蛋|"
+        r"狗屎|混蛋|我操|我草|卧槽|操你|妈的",
+        re.IGNORECASE
+    ),
+    re.compile(
+        r"(?<!\w)(?:motherfuck(?:er|ers|ing|ed|s)?|"
+        r"fuck(?:s|ed|ing)?|shit(?:ty|s)?|bitch(?:es)?|"
+        r"assholes?|bastards?|damn(?:ed|ing)?|hell|crap|"
+        r"dicks?|piss(?:ed|ing)?)(?!\w)",
+        re.IGNORECASE
+    )
+)
 
 # ==================== 日志 ====================
 
@@ -609,6 +623,24 @@ def get_lyrics(meta, use_cache=True):
     return data
 
 
+def find_lyric_profanity(lyrics):
+    """Return unique profanity terms found in lyric text."""
+    found = set()
+    for pattern in PROFANITY_PATTERNS:
+        found.update(match.group(0) for match in pattern.finditer(lyrics))
+    return sorted(found, key=str.casefold)
+
+
+def log_lyric_profanity(path, lyrics):
+    terms = find_lyric_profanity(lyrics)
+    if terms:
+        logger.warning(
+            "歌词检测到疑似脏话（%s）：%s",
+            "、".join(terms),
+            path
+        )
+
+
 # ==================== 已有歌词检查 ====================
 
 def has_existing_lyrics(path):
@@ -797,6 +829,14 @@ def process_file(path, overwrite=False, normalize=True, check_lyrics=True):
                 and existing_meta["title"]
             ):
                 existing_lyrics = read_embedded_lyrics(path)
+                if existing_lyrics:
+                    log_lyric_profanity(
+                        path,
+                        "\n".join((
+                            existing_lyrics.get("plainLyrics") or "",
+                            existing_lyrics.get("syncedLyrics") or ""
+                        ))
+                    )
                 cached, _ = load_cached_lyrics(existing_meta)
                 if existing_lyrics and not cached:
                     save_cached_lyrics(existing_meta, existing_lyrics)
@@ -857,6 +897,8 @@ def process_file(path, overwrite=False, normalize=True, check_lyrics=True):
 
         if not plain and not synced:
             return "missing"
+
+        log_lyric_profanity(path, "\n".join((plain, synced)))
 
         # 嵌入音频
         embed_lyrics(
@@ -946,6 +988,20 @@ def main():
 
         volume_pending = entry.get("volume_mtime_ns") != mtime_ns
         lyrics_present = lyrics_already_present(entry, mtime_ns)
+        if lyrics_present:
+            try:
+                existing_lyrics = read_embedded_lyrics(path)
+                if existing_lyrics:
+                    log_lyric_profanity(
+                        path,
+                        "\n".join((
+                            existing_lyrics.get("plainLyrics") or "",
+                            existing_lyrics.get("syncedLyrics") or ""
+                        ))
+                    )
+            except Exception:
+                logger.exception("读取歌词用于脏话检测失败：%s", path)
+
         if lyrics_present and not volume_pending:
             cached_count += 1
             logger.info(
