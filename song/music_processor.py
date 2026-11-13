@@ -85,6 +85,8 @@ _next_request_at = 0.0
 _lyrics_db_lock = threading.Lock()
 _volume_check_successes = set()
 _volume_success_lock = threading.Lock()
+_profanity_findings = {}
+_profanity_lock = threading.Lock()
 
 
 def open_scan_db():
@@ -634,6 +636,9 @@ def find_lyric_profanity(lyrics):
 def log_lyric_profanity(path, lyrics):
     terms = find_lyric_profanity(lyrics)
     if terms:
+        key = str(path.relative_to(MUSIC_ROOT))
+        with _profanity_lock:
+            _profanity_findings[key] = terms
         logger.warning(
             "歌词检测到疑似脏话（%s）：%s",
             "、".join(terms),
@@ -929,6 +934,9 @@ def process_file(path, overwrite=False, normalize=True, check_lyrics=True):
 
 def main():
 
+    with _profanity_lock:
+        _profanity_findings.clear()
+
     parser = argparse.ArgumentParser(
         description="批量下载并嵌入音乐歌词"
     )
@@ -1105,6 +1113,22 @@ def main():
 
     scan_db.close()
 
+    # 保存检测到脏话的歌曲
+    profanity_path = MUSIC_ROOT / "profanity_songs.txt"
+    with _profanity_lock:
+        profanity_report = [
+            f"{path}\t{', '.join(terms)}"
+            for path, terms in sorted(_profanity_findings.items())
+        ]
+
+    if profanity_report:
+        profanity_path.write_text(
+            "\n".join(profanity_report),
+            encoding="utf-8-sig"
+        )
+    elif profanity_path.exists():
+        profanity_path.unlink()
+
     # 保存未找到歌词的歌曲
     missing_path = MUSIC_ROOT / "missing.txt"
 
@@ -1125,6 +1149,7 @@ def main():
     print("跳过：", stats["skipped"])
     print("未找到：", stats["missing"])
     print("失败：", stats["failed"])
+    print("脏话歌曲：", profanity_path)
     print()
     print("歌词与扫描记录数据库：", SCAN_DB_PATH)
     print("日志：", MUSIC_ROOT / "lyrics.log")
