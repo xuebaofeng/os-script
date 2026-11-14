@@ -366,7 +366,8 @@ def create_upload_session(
         filename,
         original_path,
         sha256,
-        file_size
+        file_size,
+        privacy="public"
 ):
     ensure_credentials(
         creds
@@ -384,7 +385,7 @@ def create_upload_session(
             "categoryId": "17",
         },
         "status": {
-            "privacyStatus": "private"
+            "privacyStatus": privacy
         }
     }
 
@@ -493,7 +494,8 @@ def create_upload_session(
 def upload_file(
         conn,
         row,
-        creds
+        creds,
+        privacy="public"
 ):
     path = row["original_path"]
     filename = row["original_filename"]
@@ -525,7 +527,8 @@ def upload_file(
             filename,
             path,
             sha256,
-            file_size
+            file_size,
+            privacy
         )
 
         timestamp = now_utc()
@@ -1442,7 +1445,9 @@ def command_scan(
 
 def command_upload(
         conn,
-        folder
+        folder,
+        playlist_id=None,
+        privacy="public"
 ):
     files = find_video_files(
         folder
@@ -1451,6 +1456,15 @@ def command_upload(
     print()
     print(
         f"Found {len(files)} video file(s)."
+    )
+
+    if playlist_id:
+        print(
+            f"Playlist: {playlist_id}"
+        )
+
+    print(
+        f"Visibility: {privacy}"
     )
 
     if not files:
@@ -1498,6 +1512,15 @@ def command_upload(
                 f"{row['youtube_id']}"
             )
 
+            # Still try to add to playlist if needed.
+            if playlist_id:
+                process_playlist_video(
+                    conn,
+                    row,
+                    creds,
+                    playlist_id
+                )
+
             continue
 
         try:
@@ -1521,8 +1544,22 @@ def command_upload(
             upload_file(
                 conn,
                 row,
-                creds
+                creds,
+                privacy
             )
+
+            # ------------------------------------------------
+            # Add to playlist after successful upload
+            # ------------------------------------------------
+
+            if playlist_id:
+                row = get_by_sha256(conn, sha256)
+                process_playlist_video(
+                    conn,
+                    row,
+                    creds,
+                    playlist_id
+                )
 
         except YouTubeUploadLimitExceeded:
 
@@ -1854,7 +1891,19 @@ def main():
     upload_parser.add_argument(
         "--folder",
         required=True,
-        help="Folder to scan recursively"
+        help="Folder to scan and upload recursively"
+    )
+
+    upload_parser.add_argument(
+        "--playlist",
+        default=None,
+        help="YouTube Playlist ID to add videos to after upload"
+    )
+
+    upload_parser.add_argument(
+        "--private",
+        action="store_true",
+        help="Upload as private (default is public)"
     )
 
     # --------------------------------------------------------
@@ -1991,7 +2040,9 @@ def main():
 
             command_upload(
                 conn,
-                folder
+                folder,
+                playlist_id=args.playlist,
+                privacy="private" if args.private else "public"
             )
 
         elif args.command == "playlist":
