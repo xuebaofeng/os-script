@@ -37,6 +37,9 @@ PLAYLIST_ITEMS_URL = (
 
 CHUNK_SIZE = 8 * 1024 * 1024
 
+# "not_made_for_kids" or "made_for_kids"
+MADE_FOR_KIDS = "not_made_for_kids"
+
 VIDEO_EXTENSIONS = {
     ".mov",
     ".mp4",
@@ -385,7 +388,9 @@ def create_upload_session(
             "categoryId": "17",
         },
         "status": {
-            "privacyStatus": privacy
+            "privacyStatus": privacy,
+            "madeForKids": MADE_FOR_KIDS == "made_for_kids",
+            "selfDeclaredMadeForKids": MADE_FOR_KIDS == "made_for_kids",
         }
     }
 
