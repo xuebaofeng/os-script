@@ -1,3 +1,1 @@
-pip install -r requirements.txt
-
-pip install --upgrade fpdf
+pip install -r requirements.txt --user

@@ -1,52 +1,182 @@
-Alesso -
-Air Supply -
-Calvin Harris -
-Disney -
-Elvis Presley -
-Empire Of The Sun -
-Guns N' Roses -
-Glee Cast -
-Olivia Dean -
-Madonna -
-Muse -
-Ne-Yo -
-NIRVANA -
-Queen -
-The Beach Boys -
-*Christmas*
-Billie Eilish - bad guy
+# 按歌手（该歌手所有歌曲都排除）
+Alesso
+Air Supply
+Calvin Harris
+Disney
+Elvis Presley
+Empire Of The Sun
+Guns N' Roses
+Glee Cast
+Olivia Dean
+Madonna
+Muse
+Ne-Yo
+NIRVANA
+Queen
+The Beach Boys
+# Explicit / inappropriate artists
+Cardi B
+Latto
+21 Savage
+Nicki Minaj
+Offset
+Quavo
+Takeoff
+Megan Thee Stallion
+DaBaby
+Roddy Ricch
+Polo G
+Lil Baby
+Gunna
+Future
+Lil Uzi Vert
+Playboi Carti
+NBA YoungBoy
+YNW Melly
+Trippie Redd
+Juice WRLD
+XXXTentacion
+6ix9ine
+Travis Scott
+Young Thug
+Fetty Wap
+Tyga
+Chris Brown
+Tory Lanez
+BigXthaPlug
+F3miii
+Drake
+Eminem
+Bad Bunny
+Childish Gambino
+Tyler, The Creator
+Wiz Khalifa
+Zach Bryan
+A Boogie Wit da Hoodie
+Baby Keem
+Babychiefdoit
+Belly Gang Kushington
+DJ Khaled
+Don Toliver
+Frank Ocean
+Iggy Azalea
+J. Cole
+Kendrick Lamar
+Kehlani
+Lucky Daye
+Mac Miller
+Maluma
+Miguel
+Noodah05
+Rae Sremmurd
+Skilla Baby
+Steve Lacy
+SZA
+Kanye West
+Lil Wayne
+Snoop Dogg
+50 Cent
+DMX
+Meek Mill
+A$AP Rocky
+A$AP Ferg
+Kodak Black
+Lil Durk
+42 Dugg
+Moneybagg Yo
+Rylo Rodriguez
+Key Glock
+Young Dolph
+Mozzy
+Pooh Shiesty
+Lil Loaded
+Stunna 4 Vegas
+NLE Choppa
+Silento
+Tekashi 6ix9ine
+Jason Derulo
+DJ Snake
+Lil Jon
+Pitbull
+
+# 按歌名（精确匹配 Artist - Title）
+Ariana Grande - 7 rings
+Bruno Mars - 24K Magic
+Bruno Mars - That's What I Like
+Bryson Tiller - Don't
+Chris Stapleton - Tennessee Whiskey
+Chris Stapleton - You Should Probably Leave
+Dan + Shay - Tequila
+d4vd - Romantic Homicide
+Ellie Goulding - Love Me Like You Do
+Halsey - Without Me
+Jhené Aiko - So Good
+Jill Scott - Don't Play
+KAROL G - BbY WOW
+KAROL G, Judeline & rusowsky - BbY WOW
+KAROL G & Drake - Ahi
+Liam Payne - Strip That Down
+Luis Fonsi & Daddy Yankee - Despacito [Remix]
+Morgan Wallen - Cowgirls
+Morgan Wallen - Just In Case
+Morgan Wallen - Last Night
+Morgan Wallen - You Proof
+Post Malone - Better Now
+Post Malone - Circles
+Post Malone - Congratulations
+Post Malone - I Fall Apart
+Post Malone - I Had Some Help
+Post Malone - Psycho
+Riley Green - Worst Way
+Riley Green - Think As You Drunk
+Sam Hunt - Body Like a Back Road
+Shaboozey - A Bar Song
+Shaboozey - Cowgirl
+Steve Lacy - Bad Habit
+Tate McRae - Housewife
+The Weeknd - Starboy
+The Weeknd - Timeless
+Tyla - IS IT LOVE
+Tyla f/Zara Larsson - SHE DID IT AGAIN
+sombr - back to friends
+sombr - Homewrecker
+sombr - My Body Isn't Ready
+SZA - Kill Bill
+Tame Impala - Dracula - JENNIE Remix
 Ella Langley - you look like you love me
 Lady Gaga - Poker Face
 Sabrina Carpenter - Nonsense
 Selena Gomez - Taki Taki
 Tate McRae - Sports car
-- Die With A Smile
-- Rockabye
-- In the Name of Love
-- Hear Me Now
-- Sunflower
-- Eenie Meenie
-- Hymn for the Weekend
 Becky G - MAMIII
 Brent Faiyaz - Clouded
+Brent Faiyaz - Crew
 Disturbed - Down with the Sickness
 Elevation Worship - Praise
 Enrique Iglesias - Bailando
 Kim Petras - Unholy
+Kim Petras - When We Were Young
 Lennon Stella - Takeaway
 Lizzo - Truth Hurts
+Lizzo - About Damn Time
 MARINA - Bubblegum Bitch
 MAX - Lights Down Low
+MAX - Blueberry Eyes
 Melanie Martinez - Play Date
+Melanie Martinez - Pacify Her
 Mike Posner - I Took A Pill In Ibiza
 Oliver Tree - Miss You
+Olivia Rodrigo - cigarette smoke
 Olivia Rodrigo - drivers license
+Olivia Rodrigo - stupid song
+Olivia Rodrigo - take me home
 Pentatonix - Hallelujah
 Red Hot Chili Peppers - Californication
 Seeb - I Took A Pill In Ibiza
 Sting - Shape Of My Heart
 Take That - Back for Good
 Tatu - All The Things She Said
+Tatu - All About Us
 The Goo Goo Dolls - Iris
 The Head and the Heart - Rivers and Roads
 Trevor Daniel - Falling
@@ -62,7 +192,6 @@ Birdy - Not About Angels
 Black Sabbath - Iron Man
 Bon Iver - Skinny Love
 Boyce Avenue - We Can't Stop
-Brent Faiyaz - Crew
 Bruce Springsteen - I'm On Fire
 Cage The Elephant - Ain't No Rest For The Wicked
 Calum Scott - Dancing On My Own
@@ -76,7 +205,6 @@ Deftones - My Own Summer
 Dido - Thank You
 Disclosure - Talk
 Ella Mai - Boo'd Up
-Enrique Iglesias - Bailando
 Eric Church - Drink In My Hand
 Eric Clapton - Cocaine
 Evanescence - My Immortal
@@ -86,7 +214,6 @@ Five Finger Death Punch - Bad Company
 FLETCHER - Bitter
 Flo Rida - Replay
 Glass Animals - Gooey
-Glee Cast - Somewhere Only We Know
 Gwen Stefani - Hollaback Girl
 Hailee Steinfeld - Starving
 Halsey - Closer
@@ -106,7 +233,6 @@ JVKE - this is what falling in love feels like
 KATSEYE - Gabriela
 Kesha - TiK ToK
 Kesha - Timber
-Kim Petras - Unholy
 Kings of Leon - Use Somebody
 Kodaline - Brother
 Korn - Coming Undone
@@ -115,22 +241,18 @@ Lana Del Rey - Young And Beautiful
 LANY - Malibu Nights
 Leona Lewis - Better in Time
 Leon Bridges - River
-Lizzo - About Damn Time
 Lord Huron - Ends of the Earth
 Ludovico Einaudi - Nuvole Bianche
 Mac DeMarco - My Kind of Woman
 Marshmello - Silence
 Marvin Gaye - Sexual Healing
-Melanie Martinez - Pacify Her
 Metallica - Nothing Else Matters
 MGMT - Electric Feel
-Mike Posner - I Took A Pill In Ibiza
 Milky Chance - Flashed Junk Mind
 Mitski - Washing Machine Heart
 Mother Mother - Burning Pile
 Niall Horan - Slow Hands
 Normani - Love Lies
-Oliver Tree - Miss You
 Olivia OBrien - hate u love u
 Original Broadway Cast of Hamilton - Satisfied
 Paramore - Misery Business
@@ -138,12 +260,12 @@ Pearl Jam - Black
 Phoebe Bridgers - Motion Sickness
 Pierce The Veil - A Match Into Water
 Pitbull - Timber
+Pitbull - Give Me Everything
 Post Malone - rockstar
 Prince - Kiss
 Rita Ora - Black Widow
 Roxette - Listen to Your Heart
 Sade - Like a Tattoo
-Seeb - I Took A Pill In Ibiza
 Silk Sonic - Smokin Out The Window
 Skylar Grey - I Need A Doctor
 Sleep Token - Take Me Back To Eden
@@ -152,13 +274,11 @@ Stephen Sanchez - Until I Found You
 Steve Aoki - Pursuit Of Happiness
 Sufjan Stevens - Fourth of July
 Swedish House Mafia - Moth To A Flame
-Take That - Back for Good
 The Cranberries - Linger
 The Neighbourhood - Daddy Issues
 The Police - Roxanne
 The Smiths - Heaven Knows I'm Miserable Now
 Tom Odell - Black Friday
-Tory Lanez - WHATS POPPIN
 Tove Lo - Talking Body
 Van Morrison - Into the Mystic
 Zac Brown Band - Knee Deep
@@ -167,38 +287,22 @@ Alok - Deep Down
 alt-J - Left Hand Free
 benny blanco - Lonely
 Bring Me The Horizon - Throne
-Cage The Elephant - Ain't No Rest For The Wicked
-Enrique Iglesias - Bailando
 Florida Georgia Line - Let Me Go
 girl in red - i wanna be your girlfriend
 Green Day - American Idiot
 HUGEL - Jamaican
 Jax Jones - OUT OUT
 Kanye West - Flashing Lights
-Kim Petras - Unholy
-Kim Petras - When We Were Young
 KISS - Rock And Roll All Nite
 Labrinth - Mount Everest
-Leona Lewis - Better in Time
 Lin-Manuel Miranda - My Shot
 Mabel - Tick Tock
 Martin Garrix - Scared to Be Lonely
-MAX - Blueberry Eyes
 MEDUZA - Lose Control
-Mike Posner - I Took A Pill In Ibiza
-Oliver Tree - Miss You
 Ozzy Osbourne - Take What You Want
-Pitbull - Give Me Everything
 RAYE - Prada
-Roxette - Listen to Your Heart
-Seeb - I Took A Pill In Ibiza
-Steve Aoki - Pursuit Of Happiness
-Take That - Back for Good
-Tatu - All About Us
 The Beatles - Come Together
 The Clash - Rock the Casbah
-Tom Odell - Black Friday
-Tory Lanez - WHATS POPPIN
 Tyler Childers - All Your'n
 Van Halen - Panama
 Volbeat - Lola Montez
@@ -206,34 +310,13 @@ Amy Winehouse - Valerie
 Bazzi - Beautiful
 beabadoobee - the perfect pair
 Breaking Benjamin - I Will Not Bow
-Cage The Elephant - Ain't No Rest For The Wicked
 Conan Gray - Maniac
 Dermot Kennedy - Power Over Me
-Enrique Iglesias - Bailando
 Fleetwood Mac - The Chain
 Ghost - Square Hammer
 Gorillaz - Clint Eastwood
 James Bay - Hold Back The River
-Kim Petras - Unholy
-Leona Lewis - Better in Time
-Mike Posner - I Took A Pill In Ibiza
-Oliver Tree - Miss You
-Roxette - Listen to Your Heart
-Seeb - I Took A Pill In Ibiza
-Take That - Back for Good
-Tom Odell - Black Friday
-Tory Lanez - WHATS POPPIN
-Cage The Elephant - Ain't No Rest For The Wicked
-Enrique Iglesias - Bailando
-Kim Petras - Unholy
-Leona Lewis - Better in Time
-Mike Posner - I Took A Pill In Ibiza
-Oliver Tree - Miss You
-Roxette - Listen to Your Heart
-Seeb - I Took A Pill In Ibiza
-Take That - Back for Good
-Tom Odell - Black Friday
-Tory Lanez - WHATS POPPIN
+Tems - What You Need
 The Weeknd - One Of The Girls
 The Weeknd - The Hills
 Sam Smith - Unholy
@@ -241,7 +324,6 @@ Christina Aguilera - Lady Marmalade
 Miley Cyrus - We Can't Stop
 Demi Lovato - Cool for the Summer
 Becky Hill - Gecko
-Billie Eilish - bad guy
 Christina Aguilera - Genie In a Bottle
 Avril Lavigne - What the Hell
 Bob Dylan - Hurricane
@@ -264,20 +346,44 @@ Alicia Keys - My Boo
 Charlie Puth - Left and Right
 Dua Lipa - Levitating
 Ed Sheeran - I Don't Care
+Ed Sheeran - Galway Girl
 Ella Eyre - Just Got Paid
 Florence The Machine - Spectrum - Calvin Harris Re
 Harry Styles - Adore You
 Justin Bieber - bad guy
 Justin Bieber - Sorry
+Justin Bieber - Beauty And A Beat
+Justin Bieber - I Don't Care
 One Direction - Steal My Girl
 OneRepublic - I Don't Wanna Wait
 Selena Gomez - Wolves
 Sheryl Crow - Real Gone
-Ed Sheeran - Galway Girl
 Imagine Dragons - Sucker for Pain
 James Blunt - Stay the Night
-Justin Bieber - Beauty And A Beat
-Justin Bieber - I Don't Care
 Sia - Wild Ones
 Taylor Swift - Anti-Hero
 Taylor Swift - Style
+A Great Big World & Christina Aguilera - Say Something
+
+# 按关键字（歌名含此词即排除）
+*Christmas*
+*Die With A Smile*
+*Rockabye*
+*In the Name of Love*
+*Hear Me Now*
+*Sunflower*
+*Eenie Meenie*
+*Hymn for the Weekend*
+*fuck*
+*shit*
+*bitch*
+*nigga*
+*niggas*
+*pussy*
+*ass*
+*sex*
+*drug*
+*lean*
+*molly*
+*xanny*
+*codeine*

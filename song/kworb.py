@@ -1,137 +1,190 @@
-import requests
 import os
+import re
+import time
+import requests
+from bs4 import BeautifulSoup
 
-urls = [
+from utils import build_local_index, already_exists, split_artists
+
+# ---------------------------------------------------------------------------
+# Config
+# ---------------------------------------------------------------------------
+
+URLS = [
     "https://kworb.net/spotify/country/us_daily.html",
     "https://kworb.net/spotify/country/us_daily_totals.html",
     "https://kworb.net/spotify/country/us_weekly.html",
     "https://kworb.net/spotify/country/us_weekly_totals.html",
     "https://kworb.net/radio",
-    "https://kworb.net/pop/cumulative.html"
+    "https://kworb.net/pop/cumulative.html",
 ]
 
+CACHE_DIR = "cache"
+CACHE_TTL = 7 * 24 * 3600  # seconds; re-download if older than this
+TOP_N = 100            # rows to take per page
+LOCAL_LIBRARY = r"C:\shared\media\CloudMusic"
+BAD_WORDS_FILE = "bad_words.txt"
+OUTPUT_FILE = "tbd.txt"
 
-cache_dir = "cache"
-os.makedirs(cache_dir, exist_ok=True)
+os.makedirs(CACHE_DIR, exist_ok=True)
 
-for url in urls:
-    filename = os.path.join(cache_dir, url.split("/")[-1])
+# ---------------------------------------------------------------------------
+# Step 1: Download / refresh cache
+# ---------------------------------------------------------------------------
 
-    if not os.path.exists(filename):
-        print(f"Downloading {url} ...")
-        resp = requests.get(url)
-        with open(filename, "w", encoding="utf-8") as f:
-            f.write(resp.text)
-    else:
-        print(f"Cached file exists: {filename}")
+def cache_path(url):
+    return os.path.join(CACHE_DIR, url.split("/")[-1] or "index.html")
 
+def fetch(url):
+    path = cache_path(url)
+    age = time.time() - os.path.getmtime(path) if os.path.exists(path) else float("inf")
+    if age < CACHE_TTL:
+        print(f"[cache] {path}")
+        return
+    print(f"[download] {url}")
+    resp = requests.get(url, timeout=30)
+    resp.raise_for_status()
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(resp.text)
 
-from bs4 import BeautifulSoup
-import os
-import re
+for url in URLS:
+    fetch(url)
 
+# ---------------------------------------------------------------------------
+# Step 2: Parse pages
+# ---------------------------------------------------------------------------
 
-all_songs = []
+def clean_text(text):
+    """Normalise whitespace and fix common encoding artifacts."""
+    text = " ".join(text.split())
+    # Fix mojibake: text was decoded as latin-1 but is actually utf-8
+    try:
+        text = text.encode("latin-1").decode("utf-8")
+    except (UnicodeDecodeError, UnicodeEncodeError):
+        pass
+    # Strip control characters
+    text = re.sub(r"[\x00-\x08\x0b-\x1f\x7f]", "", text)
+    return text.strip()
 
-for url in urls:
-    file = os.path.join(url.split("/")[-1])
-    filepath = os.path.join(cache_dir, file)
-
-    print(filepath)
-
-    if not os.path.exists(filepath):
-        print(f"File not found: {filepath}")
-        continue
-
-    with open(filepath, "r", encoding="utf-8") as f:
+def parse_page(url):
+    """Return a list of 'Artist - Title' strings from a kworb page."""
+    path = cache_path(url)
+    with open(path, "r", encoding="utf-8") as f:
         soup = BeautifulSoup(f, "html.parser")
 
     table = soup.find("table")
     if not table:
-        print(f"Table not found: {filepath}")
-        continue
+        print(f"[warn] no table in {path}")
+        return []
 
-    rows = table.find_all("tr")[1:101]  # 前100条
-    for row in rows:
-        a_tags = row.find_all('a')
-        if len(a_tags) == 2:  # 每个 tr 里只有两个 a
-            artist = a_tags[0].get_text(strip=True)
-            title = a_tags[1].get_text(strip=True)
-            song = f"{artist} - {title}"
+    songs = []
+    for row in table.find_all("tr")[1 : TOP_N + 1]:
+        a_tags = row.find_all("a")
 
-        # 如果没有 <a> 标签，尝试 Radio 风格 <div>
+        if len(a_tags) >= 2:
+            # Spotify-style pages: first <a> = artist, second <a> = title
+            artist = clean_text(a_tags[0].get_text())
+            title  = clean_text(a_tags[1].get_text())
+            song   = f"{artist} - {title}"
         else:
+            # Radio / cumulative: song string is inside a <div>
             div = row.find("div")
-            if div:
-                song = div.get_text(strip=True)
-            else:
-                print("没有找到歌曲信息，跳过")
-                continue  # 没有找到歌曲信息，跳过
+            if not div:
+                continue
+            song = clean_text(div.get_text())
 
-        # 清理格式：去掉换行、多余空格
-        song = " ".join(song.split())
-        # 去掉括号及内容
-        song = re.sub(r'\s*\(.*?\)', '', song)
-        song = song.replace("â", "'")
+        # Drop parenthetical suffixes like "(feat. X)", "(Remix)", "(Live)"
+        song = re.sub(r"\s*\(.*?\)", "", song).strip()
 
-        all_songs.append(song)
+        if " - " not in song:
+            continue  # skip malformed rows
 
-# 去重
+        songs.append(song)
+
+    return songs
+
+all_songs = []
+for url in URLS:
+    found = parse_page(url)
+    print(f"  {len(found):3d} songs from {url.split('/')[-1]}")
+    all_songs.extend(found)
+
+# Deduplicate while preserving first-seen order
 unique_songs = list(dict.fromkeys(all_songs))
+print(f"\n{len(unique_songs)} unique songs across all pages.")
 
+# ---------------------------------------------------------------------------
+# Step 3: Filter out songs already in local library
+# ---------------------------------------------------------------------------
 
-print(f"{len(unique_songs)} unique_songs need to be downloaded.")
+print(f"\nScanning local library: {LOCAL_LIBRARY}")
+local_flat, local_entries = build_local_index(LOCAL_LIBRARY)
+print(f"  {len(local_entries)} tracks indexed.")
 
-music_dir = r"C:\shared\media\CloudMusic"
-existing_files = set(os.listdir(music_dir))  # 获取目录下所有文件名
+songs_to_download = [s for s in unique_songs if not already_exists(s, local_flat, local_entries)]
+print(f"  {len(unique_songs) - len(songs_to_download)} already present, "
+      f"{len(songs_to_download)} to download.")
 
-# 去掉已有文件的扩展名并统一小写
-existing_files_no_ext = set(os.path.splitext(f)[0].lower() for f in existing_files)
+# ---------------------------------------------------------------------------
+# Step 4: Family-friendly filter
+# ---------------------------------------------------------------------------
 
-# 假设已经生成了 unique_songs 列表
-# unique_songs = ["Brenda Lee - Rockin' Around The Christmas Tree", ...]
+with open(BAD_WORDS_FILE, "r", encoding="utf-8") as f:
+    lines = [line.strip() for line in f if line.strip() and not line.startswith("#")]
 
-songs_to_download = []
+blocked_artists  = set()  # artist name only — block all their songs
+blocked_songs    = set()  # exact "Artist - Title" matches
+blocked_keywords = []     # *keyword* — block if song string contains this
 
-for song in unique_songs:
-    # 只考虑歌曲名，不加后缀
-    if song.lower() not in existing_files_no_ext:
-        songs_to_download.append(song)
+for line in lines:
+    if line.startswith("*") and line.endswith("*"):
+        blocked_keywords.append(line[1:-1].lower())
+    elif " - " in line:
+        blocked_songs.add(line.lower())
+    else:
+        blocked_artists.add(line.lower())
 
-print(f"After dedupe from local, {len(songs_to_download)} songs left to be downloaded.")
-
-
-
-import re
-
-# 常见脏词列表
-bad_words = []
-with open("bad_words.txt", "r", encoding="utf-8") as f:
-    bad_words = [line.strip() for line in f]
-
-def is_family_friendly(song):
-    # 转小写检查脏词
+def is_clean(song):
     song_lower = song.lower()
-    for word in bad_words:
-        if word.lower() in song_lower:
+    # Split "Artist1 & Artist2 - Title" and check each artist individually
+    if " - " in song_lower:
+        artist_str, _ = song_lower.split(" - ", 1)
+        # Check raw artist string first (handles names with commas like "Tyler, The Creator")
+        if artist_str.strip() in blocked_artists:
             return False
-
-    # 可以加更多规则，比如排除 rap / trap 风格
-    if re.search(r'\brap\b|\btrap\b', song_lower):
+        artists = split_artists(artist_str)  # handles &, feat, x, / etc.
+    else:
+        artists = [song_lower]
+    if any(a in blocked_artists for a in artists):
         return False
-
-    # 可扩展规则：根据年份、歌手、已知列表等
+    if song_lower in blocked_songs:
+        return False
+    for kw in blocked_keywords:
+        if kw in song_lower:
+            return False
     return True
 
-# 筛选家庭友好歌曲
-family_songs = [s for s in songs_to_download if is_family_friendly(s)]
+family_songs = []
+skipped = 0
 
-print(f"{len(family_songs)} songs are family friendly out of {len(family_songs)}")
+print(f"\nChecking {len(songs_to_download)} songs...")
+for song in songs_to_download:
+    if is_clean(song):
+        family_songs.append(song)
+    else:
+        print(f"  [skip] {song}")
+        skipped += 1
 
-family_songs = sorted(set(family_songs))  # 去重并按字母顺序排序
+print(f"\n{len(family_songs)} clean songs to download ({skipped} filtered).")
 
+family_songs = sorted(set(family_songs))
 
-# 保存 TXT
-with open("tbd.txt", "w", encoding="utf-8") as f:
+# ---------------------------------------------------------------------------
+# Step 5: Write tbd.txt
+# ---------------------------------------------------------------------------
+
+with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
     for song in family_songs:
         f.write(f"{song}\n")
+
+print(f"\nWritten to {OUTPUT_FILE}.")
