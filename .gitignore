@@ -17,3 +17,8 @@
 /soccer_backup/token.json
 /soccer_backup/trace.json
 /soccer_backup/youtube_token.pickle
+
+# kaiser_slot_finder - runtime files with session data
+/kaiser_slot_finder/seen_slots.sqlite3
+/kaiser_slot_finder/kaiser_finder.log
+/kaiser_slot_finder/raw_responses/

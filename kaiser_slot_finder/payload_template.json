@@ -1,0 +1,21 @@
+{
+  "guid": 0,
+  "relId": "self",
+  "bookingId": "KMEDVAVSKINPRB2WK",
+  "facilityId": "LVM",
+  "searchType": "NEW",
+  "facilityName": "Livermore Medical Offices",
+  "facilityDeploymentUri": "urn:kp:prodcnm",
+  "flowType": "BOOKING",
+  "searchTillFirstAvailable": true,
+  "searchFirstAvailable": true,
+  "timePreference": "AM,PM,EVE",
+  "timeFrameId": "0-2WKS",
+  "dayPreference": "1,2,3,4,5,6,7",
+  "searchByFilter": false,
+  "maxSlotsToReturn": 100,
+  "bookingGuidelineId": "KMEDVAVSKINPRB2WK",
+  "classificationId": "1",
+  "sessionId": "PASTE_SESSION_ID_FROM_CURL",
+  "pcpServiceState": "PASTE_PCP_SERVICE_STATE_FROM_CURL"
+}

@@ -1,0 +1,54 @@
+{
+  "url": "https://apims.kaiserpermanente.org/kp/mycare/appointment-center/apptctr-bff-kpwebncalmedicalbooking/v1/slots",
+  "days_ahead": 30,
+  "timeout_seconds": 30,
+  "max_slots": 100,
+  "guid": 0,
+  "headers": {
+    "Accept": "application/json, text/plain, */*",
+    "Content-Type": "application/json",
+    "Origin": "https://healthy.kaiserpermanente.org",
+    "Referer": "https://healthy.kaiserpermanente.org/",
+    "x-apiKey": "kprwdapptctr24769028723239899136",
+    "x-IBM-Client-Id": "919512b4-27df-4f35-94dc-528e47e3a0c1",
+    "x-env": "prod",
+    "x-appname": "RWD",
+    "x-useragentcategory": "W",
+    "x-useragenttype": "Mozilla/5.0",
+    "x-osversion": "5.0 (Windows)",
+    "x-ismobile": "false",
+    "x-deviceType": "WPP",
+    "x-relid": "SELF",
+    "Cookie": "PASTE_COOKIE_FROM_CURL",
+    "Authorization": "Bearer PASTE_TOKEN_FROM_CURL",
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:153.0) Gecko/20100101 Firefox/153.0"
+  },
+  "facilities": [
+    {
+      "id": "LVM",
+      "name": "Livermore Medical Offices",
+      "sessionId": "PASTE_SESSION_ID_FROM_CURL"
+    },
+    {
+      "id": "BSR",
+      "name": "San Ramon Medical Offices",
+      "sessionId": "PASTE_SESSION_ID_FROM_CURL"
+    },
+    {
+      "id": "DUB",
+      "name": "Dublin Medical Center",
+      "sessionId": "PASTE_SESSION_ID_FROM_CURL",
+      "bookingId": "KMEDUCSKINNAIL2WK"
+    },
+    {
+      "id": "PLS",
+      "name": "Pleasanton Medical Offices",
+      "sessionId": "PASTE_SESSION_ID_FROM_CURL"
+    },
+    {
+      "id": "WCR",
+      "name": "Walnut Creek Medical Center",
+      "sessionId": "PASTE_SESSION_ID_FROM_CURL"
+    }
+  ]
+}

@@ -1,27 +1,31 @@
 #!/usr/bin/env python3
-# Kaiser appointment slot monitor
+# Kaiser appointment slot finder
 # Uses only the user's own authenticated session. Does NOT book appointments.
+#
+# Usage:
+#   py kaiser_finder.py              # query with current credentials
+#   py kaiser_finder.py --update     # paste a new curl first, then query
+#   py kaiser_finder.py --update-only  # update credentials only, no query
 
 import copy
 import hashlib
 import json
 import logging
-import os
 import re
 import sqlite3
-import time
+import sys
 from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
 import requests
 
-ROOT = Path(__file__).resolve().parent
-CONFIG_PATH = ROOT / "config.json"
+ROOT         = Path(__file__).resolve().parent
+CONFIG_PATH  = ROOT / "config.json"
 PAYLOAD_PATH = ROOT / "payload_template.json"
-DB_PATH = ROOT / "seen_slots.sqlite3"
-LOG_PATH = ROOT / "kaiser_finder.log"
-RAW_DIR = ROOT / "raw_responses"
+DB_PATH      = ROOT / "seen_slots.sqlite3"
+LOG_PATH     = ROOT / "kaiser_finder.log"
+RAW_DIR      = ROOT / "raw_responses"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,13 +34,109 @@ logging.basicConfig(
 )
 log = logging.getLogger("kaiser-finder")
 
-DATE_KEYS = {"date", "appointmentdate", "startdate", "localdate", "slotdate"}
-TIME_KEYS = {"time", "starttime", "appointmenttime", "slottime", "displaytime"}
-STATUS_KEYS = {"available", "isavailable", "availability", "status", "slotstatus"}
-ID_KEYS = {"slotid", "appointmentid", "id", "scheduleid"}
 
-def norm(k: Any) -> str:
-    return re.sub(r"[^a-z]", "", str(k).lower())
+# ── credential update ────────────────────────────────────────────────────────
+
+def _unescape_windows(s: str) -> str:
+    s = re.sub(r'\^\n\s*', ' ', s)
+    s = s.replace("^^", "^").replace("^%", "%").replace('^"', '"').replace("^&", "&")
+    return s
+
+def _extract_cookie(curl: str) -> str | None:
+    for pat in [
+        r"-H\s+\$?'Cookie:\s*(.*?)'(?=\s+-[HX]|\s*\\|\s*$)",
+        r'-H\s+"Cookie:\s*(.*?)"(?=\s+-[HX]|\s*\\|\s*$)',
+    ]:
+        m = re.search(pat, curl, re.DOTALL)
+        if m:
+            return m.group(1).strip()
+    return None
+
+def _extract_session_id(curl: str) -> str | None:
+    m = re.search(r'"sessionId"\s*:\s*"(KBE_[^"]+)"', curl)
+    return m.group(1) if m else None
+
+def _extract_guid(curl: str) -> int | None:
+    m = re.search(r'"guid"\s*:\s*(\d+)', curl)
+    return int(m.group(1)) if m else None
+
+def _extract_pcp_service_state(curl: str) -> str | None:
+    m = re.search(r'"pcpServiceState"\s*:\s*"([^"]+)"', curl)
+    return m.group(1) if m else None
+
+def _clear_query_cache():
+    if not DB_PATH.exists():
+        return
+    with sqlite3.connect(DB_PATH) as db:
+        tables = [r[0] for r in db.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'").fetchall()]
+        if "query_cache" in tables:
+            db.execute("DELETE FROM query_cache")
+            db.commit()
+
+def update_credentials():
+    print("Paste curl command, then press Enter twice:")
+    lines = []
+    while True:
+        try:
+            line = input()
+        except EOFError:
+            break
+        if line == "" and lines and lines[-1] == "":
+            break
+        lines.append(line)
+
+    curl = _unescape_windows("\n".join(lines))
+    cookie     = _extract_cookie(curl)
+    session_id = _extract_session_id(curl)
+    guid       = _extract_guid(curl)
+    pcp        = _extract_pcp_service_state(curl)
+
+    if not cookie:
+        sys.exit("Could not extract Cookie from curl.")
+    if not session_id:
+        sys.exit("Could not extract sessionId from curl payload.")
+
+    m     = re.search(r'MyChartAccessToken4mychartcn=([^;]+)', cookie)
+    token = m.group(1) if m else None
+
+    cfg      = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
+    template = json.loads(PAYLOAD_PATH.read_text(encoding="utf-8-sig"))
+
+    cfg["headers"]["Cookie"] = cookie
+    if token:
+        cfg["headers"]["Authorization"] = f"Bearer {token}"
+    if guid:
+        cfg["guid"] = guid
+    for f in cfg.get("facilities", []):
+        f["sessionId"] = session_id
+    CONFIG_PATH.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    template["sessionId"] = session_id
+    if guid:
+        template["guid"] = guid
+    if pcp:
+        template["pcpServiceState"] = pcp
+    PAYLOAD_PATH.write_text(json.dumps(template, indent=2, ensure_ascii=False), encoding="utf-8")
+
+    _clear_query_cache()
+
+    updated = {"sessionId": session_id}
+    if guid:
+        updated["guid"] = guid
+    if pcp:
+        updated["pcpServiceState"] = pcp[:30] + "..."
+    updated["Cookie"]    = "..." + cookie[-40:]
+    if token:
+        updated["Bearer"] = "..." + token[-40:]
+
+    print("\nCredentials updated:")
+    for k, v in updated.items():
+        print(f"  {k}: {v}")
+    print()
+
+
+# ── database ─────────────────────────────────────────────────────────────────
 
 def init_db():
     with sqlite3.connect(DB_PATH) as db:
@@ -49,79 +149,31 @@ def init_db():
             slot_time TEXT,
             details TEXT
         )""")
+        db.execute("""CREATE TABLE IF NOT EXISTS query_cache (
+            facility_id TEXT PRIMARY KEY,
+            last_queried_date TEXT NOT NULL
+        )""")
 
-def notify(title: str, message: str):
-    # Windows toast if winotify is installed; otherwise console + terminal bell.
-    print("\a", end="", flush=True)
-    try:
-        from winotify import Notification, audio
-        toast = Notification(app_id="Kaiser Slot Finder", title=title, msg=message)
-        toast.set_audio(audio.Default, loop=False)
-        toast.show()
-    except Exception:
-        log.warning("Windows toast unavailable. Install with: py -m pip install winotify")
+def was_queried_today(facility_id: str) -> bool:
+    with sqlite3.connect(DB_PATH) as db:
+        row = db.execute(
+            "SELECT last_queried_date FROM query_cache WHERE facility_id = ?",
+            (facility_id,)
+        ).fetchone()
+    return row is not None and row[0] == date.today().isoformat()
 
-def parse_bool_available(obj: dict) -> bool:
-    for k, v in obj.items():
-        nk = norm(k)
-        if nk in {"available", "isavailable"} and v is True:
-            return True
-        if nk in {"availability", "status", "slotstatus"}:
-            s = str(v).strip().lower()
-            if s in {"available", "open", "bookable", "free"}:
-                return True
-    # If response object itself resembles an actual slot and has date + time,
-    # treat it as a candidate unless explicitly marked unavailable.
-    vals = {norm(k): v for k, v in obj.items()}
-    has_date = any(k in vals for k in DATE_KEYS)
-    has_time = any(k in vals for k in TIME_KEYS)
-    explicitly_unavailable = any(
-        norm(k) in {"available", "isavailable"} and v is False for k, v in obj.items()
-    )
-    return has_date and has_time and not explicitly_unavailable
+def mark_queried_today(facility_id: str):
+    with sqlite3.connect(DB_PATH) as db:
+        db.execute(
+            "INSERT OR REPLACE INTO query_cache VALUES (?, ?)",
+            (facility_id, date.today().isoformat())
+        )
 
-def extract_candidates(data: Any):
-    found = []
-    def walk(node):
-        if isinstance(node, dict):
-            if parse_bool_available(node):
-                vals = {norm(k): v for k, v in node.items()}
-                d = next((vals[k] for k in DATE_KEYS if k in vals), "")
-                t = next((vals[k] for k in TIME_KEYS if k in vals), "")
-                sid = next((vals[k] for k in ID_KEYS if k in vals), "")
-                found.append({
-                    "date": str(d), "time": str(t), "slot_id": str(sid),
-                    "details": node
-                })
-            for v in node.values():
-                walk(v)
-        elif isinstance(node, list):
-            for v in node:
-                walk(v)
-    walk(data)
-    # De-duplicate candidates within one response
-    out, keys = [], set()
-    for item in found:
-        key = (item["date"], item["time"], item["slot_id"], json.dumps(item["details"], sort_keys=True, default=str))
-        if key not in keys:
-            keys.add(key)
-            out.append(item)
-    return out
-
-def substitute_dates(payload: dict, start: date, end: date):
-    p = copy.deepcopy(payload)
-    p["fromDate"] = start.strftime("%m/%d/%Y")
-    p["toDate"] = end.strftime("%m/%d/%Y")
-    return p
-
-def make_fingerprint(facility_id, item):
-    raw = "|".join([facility_id, item["date"], item["time"], item["slot_id"]])
+def save_new(facility, item) -> bool:
+    raw = "|".join([facility["id"], item["date"], item["time"], item["slot_id"]])
     if not item["date"] and not item["time"]:
         raw += "|" + json.dumps(item["details"], sort_keys=True, default=str)
-    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
-def save_new(facility, item):
-    fp = make_fingerprint(facility["id"], item)
+    fp = hashlib.sha256(raw.encode()).hexdigest()
     with sqlite3.connect(DB_PATH) as db:
         cur = db.execute(
             "INSERT OR IGNORE INTO seen VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -131,85 +183,195 @@ def save_new(facility, item):
         )
         return cur.rowcount == 1
 
-def main():
-    if not CONFIG_PATH.exists() or not PAYLOAD_PATH.exists():
-        raise SystemExit("Missing config.json or payload_template.json. See README.txt.")
-    cfg = json.loads(CONFIG_PATH.read_text(encoding="utf-8"))
-    template = json.loads(PAYLOAD_PATH.read_text(encoding="utf-8"))
+
+# ── slot parsing ─────────────────────────────────────────────────────────────
+
+def extract_candidates(data: Any):
+    found: list = []
+    seen_keys: set = set()
+
+    def add(slot: dict, provider_name: str = ""):
+        start = slot.get("start", "")
+        key   = (start, slot.get("end", ""), slot.get("facilityId", ""),
+                 slot.get("providerName", provider_name))
+        if key in seen_keys:
+            return
+        seen_keys.add(key)
+        found.append({
+            "date":    start[:10] if start else "",
+            "time":    start[11:16] if len(start) > 10 else "",
+            "slot_id": f"{slot.get('facilityId','')}_{start}",
+            "details": {
+                "start":           start,
+                "end":             slot.get("end", ""),
+                "facilityId":      slot.get("facilityId", ""),
+                "facilityName":    slot.get("facilityName", ""),
+                "providerName":    slot.get("providerName", provider_name),
+                "departmentName":  slot.get("departmentName", ""),
+                "isThisAVideoAppt": slot.get("isThisAVideoAppt", False),
+            }
+        })
+
+    items = data if isinstance(data, list) else [data]
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        for slot in item.get("slots", []):
+            if isinstance(slot, dict) and slot.get("start"):
+                add(slot)
+        for provider in item.get("providers", []):
+            if not isinstance(provider, dict):
+                continue
+            pname = provider.get("providerName", "")
+            for slot in provider.get("slots", []):
+                if isinstance(slot, dict) and slot.get("start"):
+                    add(slot, pname)
+    return found
+
+
+# ── display ───────────────────────────────────────────────────────────────────
+
+def fmt_time(iso: str) -> str:
+    try:
+        dt   = datetime.fromisoformat(iso)
+        day  = dt.strftime("%a, %b ") + str(dt.day)
+        hour = dt.hour % 12 or 12
+        ampm = "am" if dt.hour < 12 else "pm"
+        return f"{day}  {hour}:{dt.minute:02d} {ampm}"
+    except Exception:
+        return iso[:16]
+
+def notify(title: str, message: str):
+    print("\a", end="", flush=True)
+    try:
+        from winotify import Notification, audio
+        toast = Notification(app_id="Kaiser Slot Finder", title=title, msg=message)
+        toast.set_audio(audio.Default, loop=False)
+        toast.show()
+    except Exception:
+        pass
+
+
+# ── main query ────────────────────────────────────────────────────────────────
+
+def query():
+    cfg      = json.loads(CONFIG_PATH.read_text(encoding="utf-8-sig"))
+    template = json.loads(PAYLOAD_PATH.read_text(encoding="utf-8-sig"))
     init_db()
     RAW_DIR.mkdir(exist_ok=True)
 
-    url = cfg.get("url", "https://apims.kaiserpermanente.org/kp/mycare/appointment-center/apptctr-bff-kpwebncalmedicalbooking/v1/slots")
-    headers = cfg.get("headers", {})
+    url        = cfg.get("url", "https://apims.kaiserpermanente.org/kp/mycare/appointment-center/apptctr-bff-kpwebncalmedicalbooking/v1/slots")
+    headers    = cfg.get("headers", {})
     facilities = cfg.get("facilities", [])
-    interval = max(60, int(cfg.get("interval_minutes", 10)) * 60)
-    horizon = max(1, int(cfg.get("days_ahead", 30)))
-    timeout = int(cfg.get("timeout_seconds", 30))
+    horizon    = max(1, int(cfg.get("days_ahead", 30)))
+    timeout    = int(cfg.get("timeout_seconds", 30))
 
     if not headers.get("Cookie"):
-        raise SystemExit("config.json is missing headers.Cookie. Add your current session cookie locally; never share it.")
+        raise SystemExit("config.json is missing headers.Cookie.")
     if not facilities:
-        raise SystemExit("Add at least one facility to config.json. Only DUB is known from your sample.")
+        raise SystemExit("No facilities configured.")
 
     session = requests.Session()
     session.headers.update(headers)
 
-    log.info("Monitoring %d configured facility/facilities; next %d days; interval %d min.",
-             len(facilities), horizon, interval)
-    log.info("This program searches only. It will not book or hold an appointment.")
+    log.info("Querying %d facility/facilities; next %d days.", len(facilities), horizon)
 
-    while True:
-        today = date.today()
-        end = today + timedelta(days=horizon)
-        for facility in facilities:
+    today = date.today()
+    end   = today + timedelta(days=horizon)
+
+    for facility in facilities:
+        try:
+            if was_queried_today(facility["id"]):
+                log.info("%s: already queried today, skipping.", facility["name"])
+                continue
+
+            payload = copy.deepcopy(template)
+            payload["fromDate"]    = today.strftime("%m/%d/%Y")
+            payload["toDate"]      = end.strftime("%m/%d/%Y")
+            payload["facilityId"]  = facility["id"]
+            payload["facilityName"]= facility["name"]
+            payload["guid"]        = int(cfg.get("guid", payload.get("guid", 0)))
+            payload["searchTillFirstAvailable"] = True
+            payload["searchFirstAvailable"]     = True
+            payload["maxSlotsToReturn"]         = int(cfg.get("max_slots", 100))
+            for key in ("sessionId", "pcpServiceState", "bookingId"):
+                if facility.get(key):
+                    payload[key] = facility[key]
+                    if key == "bookingId":
+                        payload["bookingGuidelineId"] = facility[key]
+
+            response = session.post(url, json=[payload], timeout=timeout)
+            response.raise_for_status()
             try:
-                payload = substitute_dates(template, today, end)
-                payload["facilityId"] = facility["id"]
-                payload["facilityName"] = facility["name"]
-                payload["guid"] = int(cfg.get("guid", payload.get("guid", 0)))
-                payload["searchTillFirstAvailable"] = True
-                payload["searchFirstAvailable"] = True
-                payload["maxSlotsToReturn"] = int(cfg.get("max_slots", 100))
+                data = response.json()
+            except ValueError:
+                data = {"_non_json_response": response.text[:20000]}
 
-                response = session.post(url, json=[payload], timeout=timeout)
-                response.raise_for_status()
+            stamp    = datetime.now().strftime("%Y%m%d_%H%M%S")
+            raw_path = RAW_DIR / f"{facility['id']}_{stamp}.json"
+            raw_path.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
+
+            candidates = extract_candidates(data)
+            mark_queried_today(facility["id"])
+
+            if not candidates:
+                log.info("%s: no slots found.", facility["name"])
+                print(f"\n{facility['name']}: no slots available.")
+                continue
+
+            new_count = 0
+            print(f"\n{'='*55}")
+            print(f"  {facility['name']}  ({len(candidates)} slot(s))")
+            print(f"{'='*55}")
+            for item in candidates:
+                is_new = save_new(facility, item)
+                if is_new:
+                    new_count += 1
+                d          = item["details"]
+                provider   = d.get("providerName", "Unknown")
+                dept       = d.get("departmentName", "")
+                appt_type  = "Video Visit" if d.get("isThisAVideoAppt") else "In-person Visit"
+                time_label = fmt_time(d.get("start", ""))
+                new_tag    = "  ★ NEW" if is_new else ""
+                print(f"  {provider}{new_tag}")
+                print(f"  {dept}")
+                print(f"  {time_label}")
+                print(f"  {appt_type}")
+                print()
+                if is_new:
+                    notify("Kaiser: appointment available",
+                           f"{facility['name']} | {time_label} | {provider}")
+
+            log.info("%s: %d slot(s), %d new.", facility["name"], len(candidates), new_count)
+
+        except requests.HTTPError as e:
+            body = ""
+            try:
+                body = json.dumps(e.response.json(), indent=2, ensure_ascii=False)
+            except Exception:
                 try:
-                    data = response.json()
-                except ValueError:
-                    data = {"_non_json_response": response.text[:20000]}
-
-                stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                raw_path = RAW_DIR / f"{facility['id']}_{stamp}.json"
-                raw_path.write_text(json.dumps(data, ensure_ascii=False, indent=2, default=str), encoding="utf-8")
-
-                candidates = extract_candidates(data)
-                if not candidates:
-                    log.info("%s: response received, but generic parser found no slot objects. Raw: %s",
-                             facility["name"], raw_path.name)
-                    continue
-
-                for item in candidates:
-                    if save_new(facility, item):
-                        msg = f"{facility['name']} | {item['date']} {item['time']}"
-                        log.warning("NEW POSSIBLE SLOT: %s", msg)
-                        notify("Kaiser: possible appointment", msg)
-
-                log.info("%s: %d possible slot record(s).", facility["name"], len(candidates))
-
-            except requests.HTTPError as e:
-                body = ""
-                try:
-                    body = e.response.text[:1000]
+                    body = e.response.text[:3000]
                 except Exception:
                     pass
-                log.error("%s: HTTP error: %s %s", facility["name"], e, body)
-            except requests.RequestException as e:
-                log.error("%s: network error: %s", facility["name"], e)
-            except Exception:
-                log.exception("%s: unexpected error", facility.get("name", "facility"))
+            log.error("%s: HTTP %s  %s", facility["name"], e, body)
+        except requests.RequestException as e:
+            log.error("%s: network error: %s", facility["name"], e)
+        except Exception:
+            log.exception("%s: unexpected error", facility.get("name", "facility"))
 
-        log.info("Next scan in %d minutes.", interval // 60)
-        time.sleep(interval)
+
+# ── entry point ───────────────────────────────────────────────────────────────
 
 if __name__ == "__main__":
-    main()
+    args = sys.argv[1:]
+    do_update = "--update" in args or "--update-only" in args
+    do_query  = "--update-only" not in args
+
+    if not CONFIG_PATH.exists() or not PAYLOAD_PATH.exists():
+        raise SystemExit("Missing config.json or payload_template.json.")
+
+    if do_update:
+        update_credentials()
+
+    if do_query:
+        query()
