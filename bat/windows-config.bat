@@ -14,6 +14,7 @@ Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Control\Session Manager\M
     -Value 0
 
 powercfg.exe /hibernate off
+powercfg /change monitor-timeout-ac 120
 
 @REM takeown /F "C:\$Windows.~BT\*" /A /R /D Y
 @REM icacls "C:\$Windows.~BT\*.*" /grant *S-1-5-32-544:F /T /C /Q

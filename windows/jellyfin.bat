@@ -12,10 +12,10 @@ for /f "tokens=1-4 delims=:.," %%a in ("%time%") do (
     set /a start=%%a*3600+%%b*60+%%c
 )
 
-set /a end=start+1800
+set /a end=start+3600
 
 echo.
-echo ===== 30分钟倒计时 =====
+echo ===== 60分钟倒计时 =====
 
 :loop
 for /f "tokens=1-4 delims=:.," %%a in ("%time%") do (

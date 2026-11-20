@@ -114,3 +114,4 @@ if __name__ == "__main__":
     print("类型:", r["类型"])
     print("名称:", r["名称"])
     print("密码:", r["密码"])
+    input("运行完成，按 Enter 退出...")
