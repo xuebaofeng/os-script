@@ -1,0 +1,1 @@
+winget install --id=astral-sh.uv -e

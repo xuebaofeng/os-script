@@ -22,3 +22,13 @@
 /kaiser_slot_finder/seen_slots.sqlite3
 /kaiser_slot_finder/kaiser_finder.log
 /kaiser_slot_finder/raw_responses/
+/audio_scheduler.db
+/audio_scheduler.db-shm
+/audio_scheduler.db-wal
+/cache/cumulative.html
+/cache/radio
+/song/README.md
+/cache/us_daily_totals.html
+/cache/us_daily.html
+/cache/us_weekly_totals.html
+/cache/us_weekly.html
